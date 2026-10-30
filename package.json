@@ -1,0 +1,67 @@
+{
+  "name": "iphealth",
+  "productName": "IPHealth",
+  "version": "1.0.0",
+  "description": "代理池 IP 健康度检测工具 - 导入代理/代理链接，测速、测延迟、测 IP 健康度与归属地",
+  "main": "electron/main.js",
+  "author": {
+    "name": "black-ant",
+    "email": "black-ant@users.noreply.github.com"
+  },
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "fetch-core": "node scripts/fetch-core.js",
+    "dev": "electron . --dev",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win zip",
+    "dist:zip": "electron-builder --win zip",
+    "dist:exe": "makensis build/portable.nsi"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "electron": "^32.3.3",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.iphealth.desktop",
+    "productName": "IPHealth",
+    "copyright": "Copyright © 2026 IPHealth",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/mihomo.exe",
+        "to": "core/mihomo.exe"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "IPHealth-${version}-win-x64.${ext}",
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "IPHealth-${version}-win-x64-portable.${ext}",
+      "unpackDirName": "IPHealth"
+    },
+    "compression": "normal"
+  }
+}
