@@ -114,21 +114,105 @@
       </div>
     </section>
 
-    <!-- 表格 -->
-    <section class="table-wrap">
-      <div class="table-toolbar">
-        <div class="chips" id="filterChips">
-          <button class="chip active" data-filter="all">全部 <b id="cAll">0</b></button>
-          <button class="chip" data-filter="ok">可用 <b id="cOk">0</b></button>
-          <button class="chip" data-filter="fail">失败 <b id="cFail">0</b></button>
-          <button class="chip" data-filter="idle">未测 <b id="cIdle">0</b></button>
+    <div class="main-row">
+      <!-- 分组 / 分面筛选 -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sb-block">
+          <div class="sb-title">
+            <span>分组</span>
+            <button class="icon-mini" id="btnGroupMenu" title="分组操作">
+              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+            </button>
+            <div class="menu menu-right" id="groupMenu">
+              <button data-gact="new">新建分组（移入选中节点）</button>
+              <button data-gact="by-country">按地区自动分组</button>
+              <button data-gact="by-type">按协议自动分组</button>
+              <hr />
+              <button data-gact="clear">清除全部分组</button>
+            </div>
+          </div>
+          <div class="sb-list" id="groupList"></div>
         </div>
-        <div class="table-actions">
-          <span class="sel-info" id="selInfo"></span>
-          <button class="btn btn-mini" id="btnDeleteSel" disabled>删除选中</button>
-          <button class="btn btn-mini" id="btnClear" >清空全部</button>
+        <div class="sb-block">
+          <div class="sb-title"><span>协议</span></div>
+          <div class="sb-list" id="protoList"></div>
         </div>
-      </div>
+        <div class="sb-block">
+          <div class="sb-title"><span>地区</span></div>
+          <div class="sb-list" id="countryList"></div>
+        </div>
+      </aside>
+
+      <!-- 表格 -->
+      <section class="table-wrap">
+        <div class="table-toolbar">
+          <div class="tt-left">
+            <button class="btn btn-ghost btn-mini" id="btnToggleSidebar" title="显示/隐藏分组栏">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h16" stroke-linecap="round"/></svg>
+            </button>
+            <div class="chips" id="filterChips">
+              <button class="chip active" data-filter="all">全部 <b id="cAll">0</b></button>
+              <button class="chip" data-filter="ok">可用 <b id="cOk">0</b></button>
+              <button class="chip" data-filter="fail">失败 <b id="cFail">0</b></button>
+              <button class="chip" data-filter="idle">未测 <b id="cIdle">0</b></button>
+            </div>
+          </div>
+          <div class="table-actions">
+            <button class="btn btn-mini" id="btnFilter">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18l-7 8v6l-4 2v-8L3 5Z" stroke-linejoin="round"/></svg>
+              筛选<b id="filterCount" class="fcount"></b>
+            </button>
+            <span class="sel-info" id="selInfo"></span>
+            <button class="btn btn-mini" id="btnMoveGroup" disabled>移动到分组</button>
+            <button class="btn btn-mini" id="btnDeleteSel" disabled>删除选中</button>
+            <button class="btn btn-mini" id="btnClear">清空全部</button>
+          </div>
+
+          <!-- 高级筛选面板 -->
+          <div class="popover" id="filterPanel">
+            <div class="pop-head">
+              <span>筛选条件</span>
+              <button class="link-btn" id="btnResetFilter">重置</button>
+            </div>
+            <div class="pop-body">
+              <div class="frow">
+                <label>健康度 ≥</label>
+                <input type="range" id="fHealth" min="0" max="100" step="5" value="0" />
+                <span class="fval" id="fHealthVal">不限</span>
+              </div>
+              <div class="frow">
+                <label>延迟 ≤</label>
+                <input type="range" id="fLatency" min="0" max="3000" step="100" value="3000" />
+                <span class="fval" id="fLatencyVal">不限</span>
+              </div>
+              <div class="frow">
+                <label>速度 ≥</label>
+                <input type="range" id="fSpeed" min="0" max="50" step="1" value="0" />
+                <span class="fval" id="fSpeedVal">不限</span>
+              </div>
+              <div class="fsep"></div>
+              <div class="frow-col">
+                <label>IP 类型</label>
+                <div class="chips small" id="fIpTypes">
+                  <button class="chip" data-iptype="residential">住宅</button>
+                  <button class="chip" data-iptype="hosting">机房</button>
+                  <button class="chip" data-iptype="proxy">代理</button>
+                  <button class="chip" data-iptype="mobile">移动</button>
+                  <button class="chip" data-iptype="unknown">未知</button>
+                </div>
+              </div>
+              <label class="switch-line"><input type="checkbox" id="fDnsbl" /><span>只看命中黑名单的节点</span></label>
+            </div>
+          </div>
+
+          <!-- 移动到分组 -->
+          <div class="popover popover-sm" id="moveGroupPanel">
+            <div class="pop-head"><span>移动到分组</span></div>
+            <div class="pop-body" id="moveGroupList"></div>
+          </div>
+        </div>
+
+        <div class="active-filters" id="activeFilters"></div>
 
       <div class="table-scroll" id="tableScroll">
         <table class="grid">
@@ -159,7 +243,8 @@
           <button class="btn btn-primary" id="btnEmptyImport">导入代理</button>
         </div>
       </div>
-    </section>
+      </section>
+    </div>
 
     <!-- 状态栏 -->
     <footer class="statusbar">
@@ -376,6 +461,7 @@ Surge / Loon 配置、Quantumult X 配置、Base64 订阅内容"></textarea>
   <div class="toast-wrap" id="toastWrap"></div>
 
   <script src="merge.js"></script>
+  <script src="filter.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -30,7 +30,7 @@ for (let i = 0; i < 14; i += 1) {
     port: 443,
     conf: { uuid: 'b831381d', tls: true },
     raw: `${t}://example`,
-    group: '主订阅',
+    group: [c[0]][0],
     enabled: true,
     tcp: ok ? 40 + i * 7 : null,
     latency: ok ? 60 + i * 23 : null,
@@ -108,6 +108,13 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 700));
   fs.writeFileSync(path.join(__dirname, '..', '.shots', 'import.png'), (await win.capturePage()).toPNG());
   console.log('saved import.png');
+
+  // 高级筛选面板
+  await win.webContents.executeJavaScript("document.querySelector('#btnFilter').click()");
+  await new Promise((r) => setTimeout(r, 500));
+  fs.writeFileSync(path.join(__dirname, '..', '.shots', 'filter.png'), (await win.capturePage()).toPNG());
+  console.log('saved filter.png');
+  await win.webContents.executeJavaScript("document.querySelector('#btnFilter').click();");
 
   // 订阅源管理
   await win.webContents.executeJavaScript("document.querySelector('[data-close=importModal]').click(); openSourcesModal();");

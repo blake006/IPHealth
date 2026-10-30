@@ -19,7 +19,18 @@ const state = {
     plainType: 'socks5',
     theme: 'dark',
   },
-  filter: 'all',
+  filters: {
+    status: 'all',
+    group: 'all',
+    protocols: [],
+    countries: [],
+    ipTypes: [],
+    minHealth: null,
+    maxLatency: null,
+    minSpeed: null,
+    dnsblOnly: false,
+  },
+  sidebarHidden: false,
   query: '',
   sort: { key: 'latency', dir: 1 },
   selected: new Set(),
@@ -110,16 +121,164 @@ function saveNodes() {
 /* 表格渲染                                                            */
 /* ------------------------------------------------------------------ */
 
+function matchesFilters(n, skip) {
+  return window.IPHFilter.matches(n, state.filters, state.query, skip);
+}
+
 function nodeVisible(n) {
-  if (state.filter === 'ok' && n.status !== 'ok') return false;
-  if (state.filter === 'fail' && n.status !== 'fail') return false;
-  if (state.filter === 'idle' && n.status !== 'idle') return false;
-  if (state.query) {
-    const q = state.query.toLowerCase();
-    const hay = [n.name, n.server, n.country, n.city, n.isp, n.asn, n.ip, n.type, n.group].join(' ').toLowerCase();
-    if (!hay.includes(q)) return false;
+  return matchesFilters(n);
+}
+
+/** 重新计算所有筛选相关的显示（行可见性 / 条件条 / 分面计数 / 状态计数） */
+function applyFilters() {
+  for (const tr of rowMap.values()) {
+    const n = tr.__node;
+    if (n) tr.style.display = matchesFilters(n) ? '' : 'none';
   }
-  return true;
+  renderActiveFilters();
+  updateFilterBadge();
+  renderSidebar();
+  updateStatusCounts();
+}
+
+let afPending = false;
+/** 拖动滑杆等高频操作时按帧合并刷新 */
+function scheduleApplyFilters() {
+  if (afPending) return;
+  afPending = true;
+  requestAnimationFrame(() => {
+    afPending = false;
+    applyFilters();
+  });
+}
+
+function updateFilterBadge() {
+  const c = window.IPHFilter.activeCount(state.filters, state.query);
+  const badge = $('#filterCount');
+  badge.textContent = c;
+  badge.classList.toggle('show', c > 0);
+  $('#btnFilter').classList.toggle('active', c > 0);
+}
+
+/** 顶部「已激活筛选条件」chips */
+function renderActiveFilters() {
+  const box = $('#activeFilters');
+  const chips = [];
+  const f = window.IPHFilter.normalize(state.filters);
+  const add = (label, onRemove) => chips.push({ label, onRemove });
+
+  if (f.status !== 'all') {
+    const map = { ok: '可用', fail: '失败', idle: '未测' };
+    add(`状态：${map[f.status] || f.status}`, () => setStatusFilter('all'));
+  }
+  if (f.group !== 'all') {
+    add(`分组：${f.group === 'none' ? '未分组' : f.group}`, () => setGroupFilter('all'));
+  }
+  if (f.protocols.length) {
+    add(`协议：${f.protocols.map((t) => TYPE_LABEL[t] || t).join(' / ')}`, () => {
+      state.filters.protocols = [];
+      applyFilters();
+    });
+  }
+  if (f.countries.length) {
+    add(`地区：${f.countries.map((c) => (c ? flagEmoji(c) + c : '未知')).join(' ')}`, () => {
+      state.filters.countries = [];
+      applyFilters();
+    });
+  }
+  if (f.ipTypes.length) {
+    const map = { residential: '住宅', hosting: '机房', proxy: '代理', mobile: '移动', unknown: '未知' };
+    add(`IP 类型：${f.ipTypes.map((t) => map[t] || t).join(' / ')}`, () => {
+      state.filters.ipTypes = [];
+      syncFilterPanel();
+      applyFilters();
+    });
+  }
+  const nums = [];
+  if (f.minHealth != null) nums.push(`健康度 ≥ ${f.minHealth}`);
+  if (f.maxLatency != null) nums.push(`延迟 ≤ ${f.maxLatency}ms`);
+  if (f.minSpeed != null) nums.push(`速度 ≥ ${f.minSpeed}Mbps`);
+  if (f.dnsblOnly) nums.push('命中黑名单');
+  if (nums.length) {
+    add(nums.join('，'), () => {
+      state.filters.minHealth = null;
+      state.filters.maxLatency = null;
+      state.filters.minSpeed = null;
+      state.filters.dnsblOnly = false;
+      syncFilterPanel();
+      applyFilters();
+    });
+  }
+  if (state.query) add(`搜索：${state.query}`, () => { state.query = ''; $('#searchInput').value = ''; applyFilters(); });
+
+  if (!chips.length) {
+    box.classList.remove('show');
+    box.innerHTML = '';
+    return;
+  }
+  box.classList.add('show');
+  box.innerHTML =
+    '<span class="af-label">筛选</span>' +
+    chips
+      .map(
+        (c, i) =>
+          `<span class="af-chip">${esc(c.label)}<button data-af="${i}" title="移除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg></button></span>`
+      )
+      .join('') +
+    '<button class="af-clear" id="afClear">清除全部</button>';
+
+  box.querySelectorAll('[data-af]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const c = chips[Number(b.dataset.af)];
+      if (c) c.onRemove();
+    });
+  });
+  const clear = box.querySelector('#afClear');
+  if (clear) clear.addEventListener('click', resetFilters);
+}
+
+function resetFilters() {
+  state.filters = {
+    status: 'all',
+    group: 'all',
+    protocols: [],
+    countries: [],
+    ipTypes: [],
+    minHealth: null,
+    maxLatency: null,
+    minSpeed: null,
+    dnsblOnly: false,
+  };
+  state.query = '';
+  const si = $('#searchInput');
+  if (si) si.value = '';
+  $$('#filterChips .chip').forEach((x) => x.classList.toggle('active', x.dataset.filter === 'all'));
+  syncFilterPanel();
+  applyFilters();
+}
+
+function setStatusFilter(status) {
+  state.filters.status = status;
+  $$('#filterChips .chip').forEach((x) => x.classList.toggle('active', x.dataset.filter === status));
+  applyFilters();
+}
+
+function setGroupFilter(group) {
+  state.filters.group = group;
+  applyFilters();
+}
+
+/** 状态 chip 上的数字：统计「除状态外」其它筛选生效后的数量 */
+function updateStatusCounts() {
+  const pool = state.nodes.filter((n) => matchesFilters(n, 'status'));
+  const c = { all: pool.length, ok: 0, fail: 0, idle: 0 };
+  for (const n of pool) {
+    if (c[n.status] != null) c[n.status] += 1;
+  }
+  $('#cAll').textContent = c.all;
+  $('#cOk').textContent = c.ok;
+  $('#cFail').textContent = c.fail;
+  $('#cIdle').textContent = c.idle;
 }
 
 function sortedNodes() {
@@ -208,7 +367,7 @@ function renderTable() {
     if (state.selected.has(n.id)) tr.classList.add('selected');
     if (n.status === 'fail') tr.classList.add('fail');
     tr.innerHTML = rowHtml(n);
-    if (!nodeVisible(n)) tr.style.display = 'none';
+    tr.__node = n;
     frag.appendChild(tr);
     rowMap.set(n.id, tr);
   }
@@ -216,6 +375,7 @@ function renderTable() {
   tbody.appendChild(frag);
   $('#emptyState').classList.toggle('show', list.length === 0);
   updateStats();
+  applyFilters();
   updateSelInfo();
 }
 
@@ -298,6 +458,353 @@ function updateSelInfo() {
   $('#btnDeleteSel').disabled = n === 0;
   const all = state.nodes.length > 0 && n === state.nodes.length;
   $('#checkAll').checked = all;
+}
+
+/* ------------------------------------------------------------------ */
+/* 分组 & 分面侧栏                                                     */
+/* ------------------------------------------------------------------ */
+
+const IP_TYPE_LABEL = { residential: '住宅', hosting: '机房', proxy: '代理', mobile: '移动', unknown: '未知' };
+
+function sbRow(opts) {
+  const { label, count, active, value, facet, more } = opts;
+  const zero = count === 0 && !active ? ' zero' : '';
+  return `<div class="sb-item${active ? ' active' : ''}${zero}" data-facet="${facet}" data-value="${esc(value)}" title="${esc(label)}">
+      <span class="sb-name">${label}</span>
+      <span class="sb-num">${count}</span>
+      ${more ? `<button class="icon-mini sb-more" data-gmore="${esc(value)}" title="分组操作">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+      </button>` : ''}
+    </div>`;
+}
+
+function renderSidebar() {
+  if (!state.nodes.length) {
+    $('#groupList').innerHTML = '<div class="sb-empty">还没有节点</div>';
+    $('#protoList').innerHTML = '<div class="sb-empty">—</div>';
+    $('#countryList').innerHTML = '<div class="sb-empty">—</div>';
+    return;
+  }
+
+  const F = window.IPHFilter;
+  const f = state.filters;
+
+  /* 分组 */
+  const gCounts = F.facetCounts(state.nodes, f, state.query, 'group', (n) => n.group || '');
+  const allCount = [...gCounts.values()].reduce((a, b) => a + b, 0);
+  const ungrouped = gCounts.get('') || 0;
+  const groups = [...gCounts.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b, 'zh'));
+
+  let html = sbRow({ label: '全部节点', count: allCount, active: f.group === 'all', value: 'all', facet: 'group' });
+  html += sbRow({ label: '未分组', count: ungrouped, active: f.group === 'none', value: 'none', facet: 'group' });
+  html += groups
+    .map((g) => sbRow({ label: esc(g), count: gCounts.get(g) || 0, active: f.group === g, value: g, facet: 'group', more: true }))
+    .join('');
+  $('#groupList').innerHTML = html;
+
+  /* 协议 */
+  const pCounts = F.facetCounts(state.nodes, f, state.query, 'protocols', (n) => n.type);
+  const protos = [...new Set(state.nodes.map((n) => n.type))].sort((a, b) => {
+    const ca = pCounts.get(a) || 0;
+    const cb = pCounts.get(b) || 0;
+    return cb - ca || a.localeCompare(b);
+  });
+  $('#protoList').innerHTML = protos
+    .map((t) =>
+      sbRow({
+        label: TYPE_LABEL[t] || t,
+        count: pCounts.get(t) || 0,
+        active: f.protocols.includes(t),
+        value: t,
+        facet: 'protocols',
+      })
+    )
+    .join('');
+
+  /* 地区 */
+  const cCounts = F.facetCounts(state.nodes, f, state.query, 'countries', (n) => F.countryKey(n));
+  const countries = [...cCounts.keys()].sort((a, b) => (cCounts.get(b) || 0) - (cCounts.get(a) || 0));
+  const limit = state.countryLimit || 12;
+  const shown = countries.slice(0, limit);
+  let cHtml = shown
+    .map((code) =>
+      sbRow({
+        label: code ? `${flagEmoji(code)} ${code}` : '未知',
+        count: cCounts.get(code) || 0,
+        active: f.countries.includes(code),
+        value: code,
+        facet: 'countries',
+      })
+    )
+    .join('');
+  if (countries.length > limit) {
+    cHtml += `<div class="sb-item" data-facet="countries-more" data-value="1" style="color:var(--accent)">
+      <span class="sb-name">显示全部 ${countries.length} 个地区</span></div>`;
+  }
+  $('#countryList').innerHTML = cHtml || '<div class="sb-empty">暂无归属地数据</div>';
+}
+
+/** 侧栏点击 */
+function bindSidebar() {
+  const onClick = (e) => {
+    const moreBtn = e.target.closest('[data-gmore]');
+    if (moreBtn) {
+      e.stopPropagation();
+      openGroupMenu(moreBtn.dataset.gmore, moreBtn);
+      return;
+    }
+    const item = e.target.closest('.sb-item');
+    if (!item) return;
+    const { facet, value } = item.dataset;
+
+    if (facet === 'group') {
+      setGroupFilter(value);
+    } else if (facet === 'protocols') {
+      toggleFacet('protocols', value);
+    } else if (facet === 'countries') {
+      toggleFacet('countries', value);
+    } else if (facet === 'countries-more') {
+      state.countryLimit = 999;
+      renderSidebar();
+    }
+  };
+  ['#groupList', '#protoList', '#countryList'].forEach((sel) => {
+    const el = $(sel);
+    el.removeEventListener('click', onClick);
+    el.addEventListener('click', onClick);
+  });
+}
+
+function toggleFacet(key, value) {
+  const arr = state.filters[key];
+  const i = arr.indexOf(value);
+  if (i === -1) arr.push(value);
+  else arr.splice(i, 1);
+  applyFilters();
+}
+
+/** 分组右键菜单 */
+function openGroupMenu(name, anchorEl) {
+  const r = anchorEl.getBoundingClientRect();
+  showContextMenu(
+    [
+      { label: '重命名分组…', onClick: () => renameGroup(name) },
+      { label: '把选中节点移入', onClick: () => moveSelectedToGroup(name) },
+      '-',
+      { label: '导出该分组链接', onClick: () => exportGroup(name) },
+      { label: '删除分组（保留节点）', danger: true, onClick: () => deleteGroup(name) },
+    ],
+    r.left - 130,
+    r.bottom + 4
+  );
+}
+
+let ctxEl = null;
+function closeContextMenu() {
+  if (ctxEl && ctxEl.parentNode) ctxEl.remove();
+  ctxEl = null;
+}
+function showContextMenu(items, x, y) {
+  closeContextMenu();
+  const el = document.createElement('div');
+  el.className = 'menu open ctx-menu';
+  el.innerHTML = items
+    .map((it, i) => (it === '-' ? '<hr/>' : `<button data-ci="${i}" class="${it.danger ? 'danger' : ''}">${esc(it.label)}</button>`))
+    .join('');
+  el.style.left = Math.max(8, Math.min(x, window.innerWidth - 200)) + 'px';
+  el.style.top = Math.min(y, window.innerHeight - 40 - items.length * 32) + 'px';
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ci]');
+    if (!b) return;
+    const it = items[Number(b.dataset.ci)];
+    closeContextMenu();
+    if (it && it.onClick) it.onClick();
+  });
+  document.body.appendChild(el);
+  ctxEl = el;
+}
+
+/** 输入框弹窗（Electron 不支持 window.prompt） */
+function askText(title, value = '', placeholder = '') {
+  return new Promise((resolve) => {
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask open';
+    mask.style.zIndex = 220;
+    mask.innerHTML = `<div class="modal" style="width:400px">
+      <div class="modal-head"><div class="modal-title">${esc(title)}</div></div>
+      <div class="modal-body"><input class="input" id="askInput" value="${esc(value)}" placeholder="${esc(placeholder)}" /></div>
+      <div class="modal-foot"><div class="foot-btns">
+        <button class="btn" data-ask="cancel">取消</button>
+        <button class="btn btn-primary" data-ask="ok">确定</button>
+      </div></div></div>`;
+    document.body.appendChild(mask);
+    const input = mask.querySelector('#askInput');
+    const done = (v) => {
+      mask.remove();
+      resolve(v);
+    };
+    mask.addEventListener('click', (e) => {
+      if (e.target === mask) return done(null);
+      const b = e.target.closest('[data-ask]');
+      if (!b) return;
+      done(b.dataset.ask === 'ok' ? input.value.trim() : null);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') done(input.value.trim());
+      if (e.key === 'Escape') done(null);
+      e.stopPropagation();
+    });
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 30);
+  });
+}
+
+/* ---- 分组操作 ---- */
+
+async function renameGroup(oldName) {
+  const name = await askText('重命名分组', oldName, '输入新的分组名');
+  if (name == null) return;
+  if (!name) return toast('分组名不能为空', 'err');
+  let n = 0;
+  for (const node of state.nodes) {
+    if ((node.group || '') === oldName) {
+      node.group = name;
+      n += 1;
+    }
+  }
+  if (state.filters.group === oldName) state.filters.group = name;
+  saveNodes();
+  applyFilters();
+  toast(`已将 ${n} 个节点重命名到「${name}」`, 'ok');
+}
+
+function deleteGroup(name) {
+  const count = state.nodes.filter((n) => (n.group || '') === name).length;
+  const ok = confirm(`删除分组「${name}」？\n该分组下的 ${count} 个节点会变成「未分组」，不会被删除。`);
+  if (!ok) return;
+  for (const node of state.nodes) {
+    if ((node.group || '') === name) node.group = '';
+  }
+  if (state.filters.group === name) state.filters.group = 'all';
+  saveNodes();
+  applyFilters();
+  toast('分组已删除，节点已归入未分组', 'ok');
+}
+
+function moveSelectedToGroup(name) {
+  if (!state.selected.size) return toast('请先选择节点', 'err');
+  let n = 0;
+  for (const node of state.nodes) {
+    if (state.selected.has(node.id)) {
+      node.group = name;
+      n += 1;
+    }
+  }
+  saveNodes();
+  applyFilters();
+  toast(`已将 ${n} 个节点移入「${name || '未分组'}」`, 'ok');
+}
+
+async function newGroupFromSelection() {
+  if (!state.selected.size) return toast('请先选择要归组的节点', 'err');
+  const name = await askText('新建分组', '', '输入分组名称，例如：香港-家宽');
+  if (name == null) return;
+  if (!name) return toast('分组名不能为空', 'err');
+  moveSelectedToGroup(name);
+}
+
+function autoGroupBy(kind) {
+  if (!state.nodes.length) return toast('没有节点', 'err');
+  for (const node of state.nodes) {
+    if (kind === 'country') node.group = node.country || '未知地区';
+    else node.group = TYPE_LABEL[node.type] || node.type;
+  }
+  saveNodes();
+  applyFilters();
+  toast(kind === 'country' ? '已按地区重新分组' : '已按协议重新分组', 'ok');
+}
+
+function clearGroups() {
+  if (!state.nodes.some((n) => n.group)) return toast('当前没有分组', 'err');
+  if (!confirm('清除全部分组？节点会归入「未分组」，不会被删除。')) return;
+  for (const node of state.nodes) node.group = '';
+  state.filters.group = 'all';
+  saveNodes();
+  applyFilters();
+  toast('已清除全部分组', 'ok');
+}
+
+function exportGroup(name) {
+  const list = state.nodes.filter((n) => (n.group || '') === name && n.status !== 'idle');
+  const src = list.length ? list : state.nodes.filter((n) => (n.group || '') === name);
+  if (!src.length) return toast('该分组没有节点', 'err');
+  const content = src.map((n) => n.raw || `${n.type}://${n.server}:${n.port}`).join('\n');
+  window.api
+    .exportFile({ format: 'txt', content, defaultName: `iphealth-${name || 'ungrouped'}` })
+    .then((r) => {
+      if (r && r.ok) toast('已导出到 ' + r.path, 'ok');
+    });
+}
+
+/* ---- 移动到分组面板 ---- */
+function renderMoveGroupPanel() {
+  const groups = [...new Set(state.nodes.map((n) => n.group || ''))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'zh'));
+  const items = groups.map((g) => {
+    const c = state.nodes.filter((n) => (n.group || '') === g).length;
+    return `<button class="move-item" data-move="${esc(g)}">${esc(g)}<span class="sb-num">${c}</span></button>`;
+  });
+  $('#moveGroupList').innerHTML =
+    items.join('') +
+    `<button class="move-item" data-move="">未分组</button>
+     <div class="fsep"></div>
+     <button class="move-item" data-move="__new__" style="color:var(--accent)">＋ 新建分组…</button>`;
+}
+
+/* ---- 高级筛选面板 ---- */
+function syncFilterPanel() {
+  const f = state.filters;
+  $('#fHealth').value = f.minHealth == null ? 0 : f.minHealth;
+  $('#fHealthVal').textContent = f.minHealth == null ? '不限' : `≥ ${f.minHealth}`;
+  $('#fLatency').value = f.maxLatency == null ? 3000 : f.maxLatency;
+  $('#fLatencyVal').textContent = f.maxLatency == null ? '不限' : `≤ ${f.maxLatency}`;
+  $('#fSpeed').value = f.minSpeed == null ? 0 : f.minSpeed;
+  $('#fSpeedVal').textContent = f.minSpeed == null ? '不限' : `≥ ${f.minSpeed}`;
+  $$('#fIpTypes .chip').forEach((c) => c.classList.toggle('active', f.ipTypes.includes(c.dataset.iptype)));
+  $('#fDnsbl').checked = !!f.dnsblOnly;
+}
+
+function bindFilterPanel() {
+  $('#fHealth').addEventListener('input', (e) => {
+    const v = Number(e.target.value);
+    state.filters.minHealth = v === 0 ? null : v;
+    $('#fHealthVal').textContent = v === 0 ? '不限' : `≥ ${v}`;
+    scheduleApplyFilters();
+  });
+  $('#fLatency').addEventListener('input', (e) => {
+    const v = Number(e.target.value);
+    state.filters.maxLatency = v >= 3000 ? null : v;
+    $('#fLatencyVal').textContent = v >= 3000 ? '不限' : `≤ ${v}`;
+    scheduleApplyFilters();
+  });
+  $('#fSpeed').addEventListener('input', (e) => {
+    const v = Number(e.target.value);
+    state.filters.minSpeed = v === 0 ? null : v;
+    $('#fSpeedVal').textContent = v === 0 ? '不限' : `≥ ${v}`;
+    scheduleApplyFilters();
+  });
+  $$('#fIpTypes .chip').forEach((c) => {
+    c.addEventListener('click', () => {
+      toggleFacet('ipTypes', c.dataset.iptype);
+      syncFilterPanel();
+    });
+  });
+  $('#fDnsbl').addEventListener('change', (e) => {
+    state.filters.dnsblOnly = e.target.checked;
+    applyFilters();
+  });
+  $('#btnResetFilter').addEventListener('click', resetFilters);
 }
 
 /* ------------------------------------------------------------------ */
@@ -807,6 +1314,9 @@ async function init() {
   $('#plainType').value = state.settings.plainType || 'socks5';
 
   applyTheme(state.settings.theme || 'dark');
+  state.sidebarHidden = !!state.settings.sidebarHidden;
+  applySidebarState();
+  bindFilterUI();
 
   const nodes = await window.api.getStore('nodes');
   if (Array.isArray(nodes) && nodes.length) {
@@ -842,6 +1352,13 @@ document.addEventListener('click', (e) => {
 
   // 菜单
   if (!t.closest('.btn-group')) $('#testMenu').classList.remove('open');
+  if (!t.closest('.btn-group')) $('#syncMenu').classList.remove('open');
+
+  // 筛选 / 分组弹层
+  if (!t.closest('#filterPanel') && !t.closest('#btnFilter')) $('#filterPanel').classList.remove('open');
+  if (!t.closest('#moveGroupPanel') && !t.closest('#btnMoveGroup')) $('#moveGroupPanel').classList.remove('open');
+  if (!t.closest('#groupMenu') && !t.closest('#btnGroupMenu')) $('#groupMenu').classList.remove('open');
+  if (!t.closest('.ctx-menu')) closeContextMenu();
 });
 
 $('#btnImport').addEventListener('click', () => {
@@ -926,6 +1443,65 @@ $('#btnStop').addEventListener('click', async () => {
   await window.api.cancelTest();
   $('#statusText').textContent = '正在停止…';
 });
+
+function bindFilterUI() {
+  bindSidebar();
+  bindFilterPanel();
+  syncFilterPanel();
+
+  $('#btnFilter').addEventListener('click', (e) => {
+    e.stopPropagation();
+    syncFilterPanel();
+    $('#moveGroupPanel').classList.remove('open');
+    $('#filterPanel').classList.toggle('open');
+  });
+
+  $('#btnToggleSidebar').addEventListener('click', () => {
+    state.sidebarHidden = !state.sidebarHidden;
+    applySidebarState();
+    state.settings.sidebarHidden = state.sidebarHidden;
+    window.api.setStore('settings', state.settings);
+  });
+
+  $('#btnGroupMenu').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#groupMenu').classList.toggle('open');
+  });
+  $$('#groupMenu button').forEach((b) => {
+    b.addEventListener('click', () => {
+      $('#groupMenu').classList.remove('open');
+      const act = b.dataset.gact;
+      if (act === 'new') newGroupFromSelection();
+      else if (act === 'by-country') autoGroupBy('country');
+      else if (act === 'by-type') autoGroupBy('type');
+      else if (act === 'clear') clearGroups();
+    });
+  });
+
+  $('#btnMoveGroup').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!state.selected.size) return toast('请先选择节点', 'err');
+    renderMoveGroupPanel();
+    $('#filterPanel').classList.remove('open');
+    $('#moveGroupPanel').classList.toggle('open');
+  });
+  $('#moveGroupList').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-move]');
+    if (!b) return;
+    const val = b.dataset.move;
+    $('#moveGroupPanel').classList.remove('open');
+    if (val === '__new__') {
+      const name = await askText('新建分组', '', '输入分组名称');
+      if (name) moveSelectedToGroup(name);
+      return;
+    }
+    moveSelectedToGroup(val);
+  });
+}
+
+function applySidebarState() {
+  $('.main-row').classList.toggle('sidebar-hidden', !!state.sidebarHidden);
+}
 
 function openSourcesModal() {
   renderSources();
@@ -1034,21 +1610,11 @@ function chooseExportFormat() {
 
 $('#searchInput').addEventListener('input', (e) => {
   state.query = e.target.value.trim();
-  for (const [id, tr] of rowMap) {
-    const n = state.nodes.find((x) => x.id === id);
-    if (n) tr.style.display = nodeVisible(n) ? '' : 'none';
-  }
+  applyFilters();
 });
 
 $$('#filterChips .chip').forEach((c) => {
-  c.addEventListener('click', () => {
-    state.filter = c.dataset.filter;
-    $$('#filterChips .chip').forEach((x) => x.classList.toggle('active', x === c));
-    for (const [id, tr] of rowMap) {
-      const n = state.nodes.find((x) => x.id === id);
-      if (n) tr.style.display = nodeVisible(n) ? '' : 'none';
-    }
-  });
+  c.addEventListener('click', () => setStatusFilter(c.dataset.filter));
 });
 
 $$('.grid thead th.sortable').forEach((th) => {
