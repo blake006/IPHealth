@@ -8,9 +8,11 @@
 ![主界面](docs/screenshot.png)
 
 <details>
-<summary>导入面板 / 节点详情</summary>
+<summary>导入面板 / 订阅源管理 / 节点详情</summary>
 
 ![导入面板](docs/screenshot-import.png)
+
+![订阅源管理](docs/screenshot-sources.png)
 
 ![节点详情](docs/screenshot-detail.png)
 
@@ -23,6 +25,7 @@
 | 模块 | 说明 |
 | --- | --- |
 | 多格式导入 | 单条添加、批量链接、订阅地址、文件导入（拖入 .txt/.yaml/.json/.conf） |
+| 更新代理 | 订阅源管理与一键同步：新增节点、更新配置、移除失效节点，保留已测结果 |
 | 多协议支持 | VMess / VLESS / Trojan / Shadowsocks / SSR / Hysteria / Hysteria2 / TUIC / AnyTLS / SOCKS5 / HTTP / WireGuard |
 | 延迟检测 | 先预热再 3 次采样，输出平均延迟与抖动；同时给出 TCP 握手延迟 |
 | 测速 | 通过节点真实下载指定数据量，换算 Mbps（测速源可切换） |
@@ -48,6 +51,23 @@
 - **订阅链接**：自动携带 Clash 客户端 UA，兼容 Clash / V2Ray / 通用 Base64 订阅
 
 > 若 Clash 配置里只有 `proxy-providers`（远程 provider），工具会提示改用 provider 的订阅链接导入。
+
+## 更新代理（订阅同步）
+
+工具栏「更新代理」按钮可直接同步全部订阅源；下拉菜单支持「更新全部订阅源 / 更新选中节点所在订阅 / 管理订阅源…」。
+
+同步规则：
+
+| 情况 | 处理 |
+| --- | --- |
+| 订阅中新增的节点 | 追加到列表，状态为未检测 |
+| 已存在的节点（协议 + 服务器 + 端口一致） | 仅更新配置与名称，**保留延迟/速度/IP/健康度结果** |
+| 订阅中已消失的节点 | 默认移除（可在订阅源管理中关闭），同时清理其选中状态 |
+| 其它订阅源已有的同节点 | 跳过，避免重复 |
+
+订阅源会持久化保存（URL、节点数、上次更新时间、识别格式、错误信息），
+可在「管理订阅源」中添加/单独更新/移除（移除订阅源不会删除已导入的节点），
+也支持「启动应用时自动更新全部订阅」。
 
 ## 健康度评分
 
@@ -101,6 +121,8 @@ npm run dist:exe       # 用 NSIS 生成单文件便携 exe（需安装 NSIS）
 node scripts/test-parser.js   # 21 种导入格式解析测试
 node scripts/test-config.js   # 生成的 mihomo 配置合法性校验
 node scripts/test-runner.js   # 调度/失败处理端到端测试
+node scripts/test-merge.js    # 订阅同步合并/移除逻辑单测
+npx electron scripts/test-sync.js  # 订阅更新端到端测试（本地起订阅服务）
 ```
 
 ## 技术架构

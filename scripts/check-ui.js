@@ -17,7 +17,12 @@ ipcMain.handle('app:info', () => ({
   corePath: 'C:\\Program Files\\IPHealth\\resources\\core\\mihomo.exe', coreFound: true,
   userData: 'C:\\Users\\User\\AppData\\Roaming\\IPHealth',
 }));
-ipcMain.handle('store:get', (e, key) => (key === 'nodes' ? nodes : key === 'settings' ? {} : null));
+ipcMain.handle('store:get', (e, key) => {
+  if (key === 'nodes') return nodes;
+  if (key === 'settings') return {};
+  if (key === 'sources') return [{ id: 's1', url: 'https://sub.example.com/x?token=1', group: 'sub.example.com', count: 12, lastSync: Date.now() }];
+  return null;
+});
 ipcMain.handle('store:set', () => true);
 ipcMain.handle('theme:set', () => true);
 
@@ -45,6 +50,8 @@ const checks = `(() => {
     toolbarBtnCount: document.querySelectorAll('.toolbar .btn').length,
     coreText: document.querySelector('#coreText').textContent,
     emptyShown: document.querySelector('#emptyState').classList.contains('show'),
+    syncBtn: !!document.querySelector('#btnSync'),
+    toolbarBtns: [...document.querySelectorAll('.toolbar .btn')].map(b => b.innerText.trim()).filter(Boolean),
   };
   return JSON.stringify(out, null, 1);
 })()`;

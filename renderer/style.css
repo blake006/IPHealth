@@ -410,6 +410,30 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .about b { color: var(--text-dim); font-weight: 550; }
 .about code { font-family: Consolas, monospace; color: var(--text-dim); }
 
+/* ---------------- 订阅源列表 ---------------- */
+.src-list { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow: auto; }
+.src-list::-webkit-scrollbar { width: 8px; }
+.src-list::-webkit-scrollbar-thumb { background: #2c3444; border-radius: 5px; }
+.src-empty {
+  border: 1px dashed var(--border); border-radius: 10px; padding: 22px;
+  text-align: center; font-size: 12px; color: var(--text-faint); line-height: 1.8;
+}
+.src-item {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-elev-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 9px 12px;
+}
+.src-main { flex: 1; min-width: 0; }
+.src-name { font-size: 12.5px; color: var(--text); display: flex; align-items: center; gap: 7px; }
+.src-url { font-size: 11px; color: var(--text-faint); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-meta { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+.src-count {
+  flex: none; font-size: 11px; padding: 2px 8px; border-radius: 6px;
+  background: var(--accent-soft); color: var(--accent); border: 1px solid rgba(79,140,255,.25);
+}
+.src-actions { display: flex; gap: 4px; flex: none; }
+.src-item.syncing { border-color: var(--accent); }
+
 /* ---------------- 抽屉 ---------------- */
 .drawer-mask {
   position: fixed; inset: 0; background: rgba(6,8,13,.45); display: none; z-index: 90;

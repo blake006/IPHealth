@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS = {
   speedBytes: 10,
   speedSource: 'cloudflare',
   deepHealth: true,
+  autoSyncOnStart: false,
   latencyUrls: [],
   ipUrls: [],
   plainType: 'socks5',

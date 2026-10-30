@@ -32,6 +32,21 @@
           导入代理
         </button>
         <div class="btn-group">
+          <button class="btn" id="btnSync">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            更新代理
+          </button>
+          <button class="btn btn-split" id="btnSyncMenu" title="更新选项">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="menu" id="syncMenu">
+            <button data-sync="all">更新全部订阅源</button>
+            <button data-sync="selected">更新选中节点所在订阅</button>
+            <hr />
+            <button data-sync="manage">管理订阅源…</button>
+          </div>
+        </div>
+        <div class="btn-group">
           <button class="btn" id="btnTestAll" data-mode="full">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z" stroke-linejoin="round"/></svg>
             全面检测
@@ -307,6 +322,42 @@ Surge / Loon 配置、Quantumult X 配置、Base64 订阅内容"></textarea>
     </div>
   </div>
 
+  <!-- 订阅源管理 -->
+  <div class="modal-mask" id="sourcesModal">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">订阅源管理</div>
+        <button class="icon-btn" data-close="sourcesModal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="field-row">
+          <div class="field">
+            <label>添加订阅源</label>
+            <input id="srcNewUrl" class="input" placeholder="https://example.com/api/v1/client/subscribe?token=xxxx" />
+          </div>
+          <button class="btn" id="btnAddSource" style="align-self:flex-end;height:36px">添加并导入</button>
+        </div>
+        <div class="src-list" id="srcList"></div>
+        <label class="switch-line">
+          <input type="checkbox" id="syncRemoveGone" checked />
+          <span>同步时移除订阅中已失效的节点（仍存在的节点保留检测结果）</span>
+        </label>
+        <label class="switch-line">
+          <input type="checkbox" id="autoSyncOnStart" />
+          <span>启动应用时自动更新全部订阅</span>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <div class="foot-btns">
+          <button class="btn" data-close="sourcesModal">关闭</button>
+          <button class="btn btn-primary" id="btnSyncAllInModal">更新全部</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 详情抽屉 -->
   <div class="drawer-mask" id="drawerMask"></div>
   <aside class="drawer" id="drawer">
@@ -324,6 +375,7 @@ Surge / Loon 配置、Quantumult X 配置、Base64 订阅内容"></textarea>
 
   <div class="toast-wrap" id="toastWrap"></div>
 
+  <script src="merge.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

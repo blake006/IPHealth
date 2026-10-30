@@ -13,6 +13,7 @@ const state = {
     speedBytes: 10,
     speedSource: 'cloudflare',
     deepHealth: true,
+    autoSyncOnStart: false,
     latencyUrls: [],
     ipUrls: [],
     plainType: 'socks5',
@@ -25,6 +26,8 @@ const state = {
   running: false,
   progress: { finished: 0, total: 0 },
   importTab: 'batch',
+  sources: [],
+  syncing: false,
 };
 
 const rowMap = new Map();
@@ -322,6 +325,149 @@ function mergeNodes(incoming) {
   return added.length;
 }
 
+/* ------------------------------------------------------------------ */
+/* 订阅源：登记 / 更新                                                */
+/* ------------------------------------------------------------------ */
+
+function saveSources() {
+  window.api.setStore('sources', state.sources);
+}
+
+/** 登记一个订阅源（已存在则刷新节点数与时间） */
+function registerSource(url, group, count, format) {
+  if (!url) return null;
+  let src = state.sources.find((x) => x.url === url);
+  if (!src) {
+    src = {
+      id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      url,
+      group: group || '',
+      count: count || 0,
+      format: format || '',
+      lastSync: Date.now(),
+      addedAt: Date.now(),
+      error: '',
+    };
+    state.sources.push(src);
+  } else {
+    src.count = count != null ? count : src.count;
+    src.format = format || src.format;
+    src.lastSync = Date.now();
+    src.error = '';
+  }
+  saveSources();
+  renderSources();
+  return src;
+}
+
+/** 合并某订阅源的最新节点（实现见 merge.js） */
+function mergeFromSource(src, incoming, removeGone) {
+  return window.IPHMerge.mergeFromSource(state, src, incoming, removeGone);
+}
+
+async function syncSources(list) {
+  if (state.syncing) return toast('正在更新中，请稍候', 'err');
+  if (state.running) return toast('检测进行中，请等待检测结束后再更新', 'err');
+  if (!list || !list.length) {
+    return toast('没有可更新的订阅源，请先在「导入代理 → 订阅地址」添加', 'err');
+  }
+  const removeGone = $('#syncRemoveGone').checked;
+
+  state.syncing = true;
+  updateSyncButtons();
+  let added = 0;
+  let updated = 0;
+  let removed = 0;
+  const failures = [];
+
+  for (let i = 0; i < list.length; i += 1) {
+    const src = list[i];
+    $('#statusText').textContent = `正在更新订阅 ${i + 1}/${list.length} · ${src.group || src.url}`;
+    $('#progressBar').style.width = `${Math.round((i / list.length) * 100)}%`;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const res = await window.api.fetchSubscription(src.url);
+      if (!res.nodes || !res.nodes.length) throw new Error('未解析到节点');
+      const r = mergeFromSource(src, res.nodes, removeGone);
+      added += r.added;
+      updated += r.updated;
+      removed += r.removed;
+      src.count = res.nodes.length;
+      src.lastSync = Date.now();
+      src.format = res.format || src.format;
+      src.error = '';
+    } catch (e) {
+      failures.push({ src, error: e.message || String(e) });
+      src.error = e.message || String(e);
+    }
+    renderSources();
+    saveSources();
+  }
+
+  state.syncing = false;
+  updateSyncButtons();
+  saveNodes();
+  renderTable();
+  $('#progressBar').style.width = '100%';
+  setTimeout(() => {
+    if (!state.running && !state.syncing) $('#progressBar').style.width = '0';
+  }, 900);
+
+  const summary = `更新完成：新增 ${added} · 更新 ${updated} · 移除 ${removed}`;
+  $('#statusText').textContent = summary;
+  if (failures.length) {
+    toast(`${summary}；${failures.length} 个订阅源失败：${failures[0].error}`, 'err');
+  } else {
+    toast(summary, 'ok');
+  }
+  return { added, updated, removed, failures };
+}
+
+function updateSyncButtons() {
+  const on = state.syncing;
+  $('#btnSync').disabled = on;
+  $('#btnSyncMenu').disabled = on;
+  $('#btnSyncAllInModal').disabled = on;
+  $('#btnSync').classList.toggle('busy', on);
+  $('#btnSyncAllInModal').textContent = on ? '更新中…' : '更新全部';
+}
+
+function renderSources() {
+  const box = $('#srcList');
+  if (!box) return;
+  if (!state.sources.length) {
+    box.innerHTML = `<div class="src-empty">还没有订阅源<br/>在「导入代理 → 订阅地址」导入订阅后，会自动登记在这里</div>`;
+    return;
+  }
+  box.innerHTML = state.sources
+    .map((src) => {
+      const name = src.group || (() => {
+        try {
+          return new URL(src.url).hostname;
+        } catch (e) {
+          return '订阅源';
+        }
+      })();
+      const last = src.lastSync ? new Date(src.lastSync).toLocaleString('zh-CN') : '未更新';
+      const err = src.error ? `<div class="src-meta" style="color:var(--bad)">${esc(src.error)}</div>` : '';
+      return `<div class="src-item" data-src="${src.id}">
+        <div class="src-main">
+          <div class="src-name">${esc(name)}<span class="src-count">${src.count || 0} 个节点</span></div>
+          <div class="src-url" title="${esc(src.url)}">${esc(src.url)}</div>
+          <div class="src-meta">上次更新：${last}${src.format ? ' · ' + esc(src.format) : ''}</div>
+          ${err}
+        </div>
+        <div class="src-actions">
+          <button class="btn btn-mini" data-src-act="sync" data-src-id="${src.id}">更新</button>
+          <button class="icon-mini" data-src-act="del" data-src-id="${src.id}" title="移除订阅源（不删除节点）">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </div>`;
+    })
+    .join('');
+}
+
 function switchTab(tab) {
   state.importTab = tab;
   $$('#importTabs .tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
@@ -357,8 +503,9 @@ async function doImport() {
         return;
       }
       const added = mergeNodes(res.nodes);
+      registerSource(url, new URL(url).hostname, res.nodes.length, res.format);
       $('#subResult').className = 'sub-result ok';
-      $('#subResult').textContent = `订阅解析成功（${res.format || '未知格式'}）：识别 ${res.nodes.length} 个节点，新增 ${added} 个`;
+      $('#subResult').textContent = `订阅解析成功（${res.format || '未知格式'}）：识别 ${res.nodes.length} 个节点，新增 ${added} 个，已登记为订阅源`;
       toast(`订阅导入成功，新增 ${added} 个节点`, 'ok');
       closeModal('importModal');
     } else if (tab === 'single') {
@@ -422,6 +569,8 @@ function setRunning(on) {
   $('#btnTestAll').disabled = on;
   $('#btnTestMenu').disabled = on;
   $('#btnImport').disabled = on;
+  $('#btnSync').disabled = on;
+  $('#btnSyncMenu').disabled = on;
   $('#btnStop').disabled = !on;
   $('#statusText').textContent = on ? '检测中…' : '就绪';
   if (!on) {
@@ -666,7 +815,16 @@ async function init() {
     renderTable();
   }
 
+  const sources = await window.api.getStore('sources');
+  if (Array.isArray(sources)) state.sources = sources;
+  renderSources();
+
   window.api.onTestEvent(handleTestEvent);
+
+  // 启动时自动更新订阅
+  if (state.settings.autoSyncOnStart && state.sources.length) {
+    setTimeout(() => syncSources(state.sources.slice()), 900);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -713,9 +871,46 @@ $('#dropzone').addEventListener('click', async () => {
   toast(`文件导入成功，新增 ${added} 个节点`, 'ok');
 });
 
+$('#btnSync').addEventListener('click', () => {
+  if (!state.sources.length) {
+    openSourcesModal();
+    return toast('还没有订阅源，请先添加订阅链接', 'err');
+  }
+  syncSources(state.sources.slice());
+});
+$('#btnSyncMenu').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('#testMenu').classList.remove('open');
+  $('#syncMenu').classList.toggle('open');
+});
+$$('#syncMenu button').forEach((b) => {
+  b.addEventListener('click', () => {
+    $('#syncMenu').classList.remove('open');
+    const act = b.dataset.sync;
+    if (act === 'all') {
+      if (!state.sources.length) {
+        openSourcesModal();
+        return toast('还没有订阅源，请先添加订阅链接', 'err');
+      }
+      syncSources(state.sources.slice());
+    } else if (act === 'selected') {
+      const urls = new Set();
+      state.nodes.forEach((n) => {
+        if (state.selected.has(n.id) && n.source) urls.add(n.source);
+      });
+      const list = state.sources.filter((src) => urls.has(src.url));
+      if (!list.length) return toast('选中的节点不属于任何订阅源', 'err');
+      syncSources(list);
+    } else if (act === 'manage') {
+      openSourcesModal();
+    }
+  });
+});
+
 $('#btnTestAll').addEventListener('click', () => runTest('full', false));
 $('#btnTestMenu').addEventListener('click', (e) => {
   e.stopPropagation();
+  $('#syncMenu').classList.remove('open');
   $('#testMenu').classList.toggle('open');
 });
 $$('#testMenu button').forEach((b) => {
@@ -729,6 +924,60 @@ $$('#testMenu button').forEach((b) => {
 $('#btnStop').addEventListener('click', async () => {
   await window.api.cancelTest();
   $('#statusText').textContent = '正在停止…';
+});
+
+function openSourcesModal() {
+  renderSources();
+  $('#syncRemoveGone').checked = state.settings.syncRemoveGone !== false;
+  $('#autoSyncOnStart').checked = !!state.settings.autoSyncOnStart;
+  openModal('sourcesModal');
+}
+
+$('#btnSyncAllInModal').addEventListener('click', () => {
+  if (!state.sources.length) return toast('还没有订阅源', 'err');
+  syncSources(state.sources.slice());
+});
+
+$('#btnAddSource').addEventListener('click', async () => {
+  const url = $('#srcNewUrl').value.trim();
+  if (!url) return toast('请填写订阅链接', 'err');
+  try {
+    const res = await window.api.fetchSubscription(url);
+    if (!res.nodes.length) return toast('订阅未解析到节点' + (res.errors.length ? '：' + res.errors[0].error : ''), 'err');
+    const added = mergeNodes(res.nodes);
+    registerSource(url, new URL(url).hostname, res.nodes.length, res.format);
+    $('#srcNewUrl').value = '';
+    renderTable();
+    renderSources();
+    toast(`订阅已添加：识别 ${res.nodes.length} 个节点，新增 ${added} 个`, 'ok');
+  } catch (e) {
+    toast('订阅添加失败：' + (e.message || e), 'err');
+  }
+});
+
+$('#srcList').addEventListener('click', (e) => {
+  const act = e.target.closest('[data-src-act]');
+  if (!act) return;
+  const src = state.sources.find((x) => x.id === act.dataset.srcId);
+  if (!src) return;
+  if (act.dataset.srcAct === 'sync') {
+    syncSources([src]);
+  } else if (act.dataset.srcAct === 'del') {
+    state.sources = state.sources.filter((x) => x.id !== src.id);
+    saveSources();
+    renderSources();
+    toast('已移除订阅源（节点仍保留在列表中）', 'ok');
+  }
+});
+
+$('#syncRemoveGone').addEventListener('change', (e) => {
+  state.settings.syncRemoveGone = e.target.checked;
+  window.api.setStore('settings', state.settings);
+});
+
+$('#autoSyncOnStart').addEventListener('change', (e) => {
+  state.settings.autoSyncOnStart = e.target.checked;
+  window.api.setStore('settings', state.settings);
 });
 
 $('#btnSettings').addEventListener('click', () => {
@@ -887,6 +1136,7 @@ document.addEventListener('keydown', (e) => {
     closeDrawer();
     $$('.modal-mask.open').forEach((m) => m.classList.remove('open'));
     $('#testMenu').classList.remove('open');
+    $('#syncMenu').classList.remove('open');
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
     e.preventDefault();

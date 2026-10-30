@@ -1099,17 +1099,25 @@ function parseText(text, opts = {}, depth = 0) {
 
   const group = opts.group || '';
   const done = (fmt) => ({ nodes, errors, format: fmt });
+  // 统一打上来源/分组标记（Clash / JSON 分支不走逐行解析，需要单独补）
+  const tagAll = (arr) => {
+    for (const n of arr) {
+      if (opts.source && !n.source) n.source = opts.source;
+      if (group && !n.group) n.group = group;
+    }
+    return arr;
+  };
 
   /* ---------- 1. JSON ---------- */
   if (/^[\[{]/.test(content)) {
     try {
       const doc = JSON.parse(content);
       const sb = parseSingboxJson(doc, group);
-      if (sb) return { nodes: sb, errors, format: 'sing-box JSON' };
+      if (sb) return { nodes: tagAll(sb), errors, format: 'sing-box JSON' };
       const sip = parseSip008(doc, group);
-      if (sip) return { nodes: sip, errors, format: 'SIP008 JSON' };
+      if (sip) return { nodes: tagAll(sip), errors, format: 'SIP008 JSON' };
       const clash = parseClashJson(content, group);
-      if (clash) return { nodes: clash, errors, format: 'Clash JSON' };
+      if (clash) return { nodes: tagAll(clash), errors, format: 'Clash JSON' };
       if (Array.isArray(doc)) {
         const arr = [];
         for (const item of doc) {
@@ -1118,7 +1126,7 @@ function parseText(text, opts = {}, depth = 0) {
             if (n) arr.push(n);
           }
         }
-        if (arr.length) return { nodes: arr, errors, format: 'JSON 数组' };
+        if (arr.length) return { nodes: tagAll(arr), errors, format: 'JSON 数组' };
       }
     } catch (e) {
       /* 继续尝试其它格式 */
@@ -1133,7 +1141,7 @@ function parseText(text, opts = {}, depth = 0) {
       const doc = yaml.load(content);
       if (doc && typeof doc === 'object') {
         if (Array.isArray(doc.proxies) && doc.proxies.length) {
-          return { nodes: parseClashYaml(content, group), errors, format: 'Clash YAML' };
+          return { nodes: tagAll(parseClashYaml(content, group)), errors, format: 'Clash YAML' };
         }
         if (doc['proxy-providers'] && typeof doc['proxy-providers'] === 'object') {
           const providers = Object.keys(doc['proxy-providers']);

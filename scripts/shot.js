@@ -66,8 +66,14 @@ ipcMain.handle('app:info', () => ({
   coreFound: true,
   userData: 'C:\\Users\\User\\AppData\\Roaming\\IPHealth',
 }));
+const sources = [
+  { id: 's1', url: 'https://sub.example.com/api/v1/client/subscribe?token=8f3ac1', group: 'sub.example.com', count: 12, format: 'Clash YAML', lastSync: Date.now() - 3600000 },
+  { id: 's2', url: 'https://airport.example.net/api/v1/client/subscribe?token=xx91k2', group: 'airport.example.net', count: 9, format: 'Base64 订阅', lastSync: Date.now() - 86400000, error: '' },
+];
+
 ipcMain.handle('store:get', (e, key) => {
   if (key === 'nodes') return nodes;
+  if (key === 'sources') return sources;
   if (key === 'settings') return { concurrency: 8, latencyTimeout: 8000, speedTimeout: 20000, speedBytes: 10, speedSource: 'cloudflare', deepHealth: true, latencyUrls: [], ipUrls: [], plainType: 'socks5' };
   return null;
 });
@@ -102,6 +108,13 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 700));
   fs.writeFileSync(path.join(__dirname, '..', '.shots', 'import.png'), (await win.capturePage()).toPNG());
   console.log('saved import.png');
+
+  // 订阅源管理
+  await win.webContents.executeJavaScript("document.querySelector('[data-close=importModal]').click(); openSourcesModal();");
+  await new Promise((r) => setTimeout(r, 700));
+  fs.writeFileSync(path.join(__dirname, '..', '.shots', 'sources.png'), (await win.capturePage()).toPNG());
+  console.log('saved sources.png');
+  await win.webContents.executeJavaScript("document.querySelector('[data-close=sourcesModal]').click();");
 
   // 关闭弹窗 + 详情抽屉
   await win.webContents.executeJavaScript("document.querySelector('[data-close=importModal]').click(); document.querySelector('#tbody tr').click();");
