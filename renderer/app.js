@@ -1217,8 +1217,11 @@ function closeDrawer() {
 /* ------------------------------------------------------------------ */
 
 function buildExport(format) {
-  const nodes = sortedNodes().filter((n) => n.status !== 'idle');
-  const list = nodes.length ? nodes : state.nodes;
+  // 导出当前筛选结果（所见即所得）；若筛选后为空则退回全部节点
+  const visible = sortedNodes().filter((n) => matchesFilters(n));
+  const base = visible.length ? visible : state.nodes;
+  const tested = base.filter((n) => n.status !== 'idle');
+  const list = tested.length ? tested : base;
   if (format === 'json') {
     return JSON.stringify(
       list.map((n) => ({
