@@ -7,6 +7,15 @@
 
 ![主界面](docs/screenshot.png)
 
+<details>
+<summary>导入面板 / 节点详情</summary>
+
+![导入面板](docs/screenshot-import.png)
+
+![节点详情](docs/screenshot-detail.png)
+
+</details>
+
 ---
 
 ## 功能
