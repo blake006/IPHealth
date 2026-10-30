@@ -424,7 +424,7 @@ async function syncSources(list) {
 }
 
 function updateSyncButtons() {
-  const on = state.syncing;
+  const on = state.syncing || state.running;
   $('#btnSync').disabled = on;
   $('#btnSyncMenu').disabled = on;
   $('#btnSyncAllInModal').disabled = on;
@@ -581,6 +581,7 @@ function setRunning(on) {
 
 async function runTest(mode, onlySelected) {
   if (state.running) return toast('已有检测任务在进行', 'err');
+  if (state.syncing) return toast('正在更新订阅，请稍后再检测', 'err');
   let targets = onlySelected ? state.nodes.filter((n) => state.selected.has(n.id)) : state.nodes.slice();
   if (!targets.length) return toast(onlySelected ? '请先选择节点' : '没有可检测的节点', 'err');
 
