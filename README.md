@@ -163,6 +163,9 @@ npm run dist           # 打包 → dist/IPHealth-<版本>-win-x64.zip
 npm run dist:exe       # 用 NSIS 生成单文件便携 exe（需安装 NSIS）
 ```
 
+版本号规则：`1.0.X` 顺序递增（`1.0.0 → 1.0.1 → 1.0.2 …`）。
+只需改 `package.json` 的 `version`，zip 与 exe 的产物名、exe 的版本资源都会自动跟随。
+
 > 打包说明：默认关闭代码签名与 exe 资源改写（`signAndEditExecutable: false`），
 > 以避免在无证书环境下拉取 winCodeSign；exe 图标与版本信息由 NSIS 脚本写入。
 

@@ -1,7 +1,7 @@
 {
   "name": "iphealth",
   "productName": "IPHealth",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "代理池 IP 健康度检测工具 - 导入代理/代理链接，测速、测延迟、测 IP 健康度与归属地",
   "main": "electron/main.js",
   "author": {
@@ -17,7 +17,7 @@
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win zip",
     "dist:zip": "electron-builder --win zip",
-    "dist:exe": "makensis build/portable.nsi"
+    "dist:exe": "node scripts/build-exe.js"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"
