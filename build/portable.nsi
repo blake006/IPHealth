@@ -20,7 +20,7 @@ SetOverwrite on
 
 VIProductVersion "${VERSION}.0"
 VIAddVersionKey "ProductName" "IPHealth"
-VIAddVersionKey "FileDescription" "代理池 IP 健康度检测工具"
+VIAddVersionKey "FileDescription" "IPHealth"
 VIAddVersionKey "CompanyName" "IPHealth"
 VIAddVersionKey "LegalCopyright" "Copyright (c) 2026 IPHealth"
 VIAddVersionKey "FileVersion" "${VERSION}.0"

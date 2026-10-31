@@ -1,7 +1,7 @@
 {
   "name": "iphealth",
   "productName": "IPHealth",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "代理池 IP 健康度检测工具 - 导入代理/代理链接，测速、测延迟、测 IP 健康度与归属地",
   "main": "electron/main.js",
   "author": {
@@ -12,12 +12,13 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "fetch-core": "node scripts/fetch-core.js",
+    "fetch-core": "node scripts/fetch-core.js && node scripts/fetch-rcedit.js",
     "dev": "electron . --dev",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win zip",
     "dist:zip": "electron-builder --win zip",
-    "dist:exe": "node scripts/build-exe.js"
+    "dist:exe": "node scripts/build-exe.js",
+    "fetch-rcedit": "node scripts/fetch-rcedit.js"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"
@@ -43,6 +44,10 @@
       {
         "from": "vendor/mihomo.exe",
         "to": "core/mihomo.exe"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
       }
     ],
     "win": {
@@ -62,6 +67,7 @@
       "artifactName": "IPHealth-${version}-win-x64-portable.${ext}",
       "unpackDirName": "IPHealth"
     },
-    "compression": "normal"
+    "compression": "normal",
+    "afterPack": "scripts/after-pack.js"
   }
 }

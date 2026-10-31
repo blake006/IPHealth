@@ -157,7 +157,7 @@
 
 ```bash
 npm install
-npm run fetch-core     # 下载 mihomo 内核到 vendor/mihomo.exe
+npm run fetch-core     # 下载 mihomo 内核 + rcedit 到 vendor/
 npm start              # 开发运行
 npm run dist           # 打包 → dist/IPHealth-<版本>-win-x64.zip
 npm run dist:exe       # 用 NSIS 生成单文件便携 exe（需安装 NSIS）
@@ -199,6 +199,8 @@ vendor/mihomo.exe       代理内核（打包时放入 resources/core）
 - 工具只做「检测」，不提供任何代理线路，也不修改系统代理设置。
 - 检测过程会真实向测试目标发起下载，请留意流量消耗（默认单节点 10MB）。
 - 内核缺失时窗口右上角会显示「内核缺失」，执行 `npm run fetch-core` 或重新下载发行版即可。
+- 应用自带独立图标、`FileDescription` 与 AppUserModelID，任务管理器里显示为 **IPHealth**，
+  不会和其它 Electron 应用（如 V2PTools）混在一起，任务栏也是自己的图标。
 - 只允许单实例运行（重复启动会聚焦已有窗口），避免两个窗口同时写同一份节点数据。
 - 窗口大小/位置与最大化状态会被记住；更换显示器后若越界会自动回到主屏。
 - 导入文件与订阅内容默认按 UTF-8 解析，遇到乱码会自动回退到 GBK（兼容国内常见的 ANSI 编码）。

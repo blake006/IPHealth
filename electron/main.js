@@ -49,6 +49,14 @@ const { fetchSubscription, decodeBuffer } = require('./lib/subscribe');
 /* 窗口                                                                */
 /* ------------------------------------------------------------------ */
 
+/** 窗口/任务栏图标（打包后在 resources/icon.ico，开发时用 build/icon.ico） */
+function resolveIconPath() {
+  const cands = [];
+  if (app.isPackaged) cands.push(path.join(process.resourcesPath, 'icon.ico'));
+  cands.push(path.join(__dirname, '..', 'build', 'icon.ico'));
+  return cands.find((p) => fs.existsSync(p));
+}
+
 /** 读取上次窗口位置/大小，并做越界校正（换显示器后不会跑到屏幕外） */
 function loadWindowState() {
   try {
@@ -90,6 +98,7 @@ function createWindow() {
     minHeight: 660,
     ...(state.bounds || {}),
     show: false,
+    icon: resolveIconPath(),
     backgroundColor: '#0e1015',
     titleBarStyle: 'hidden',
     titleBarOverlay: {
@@ -134,6 +143,8 @@ app.on('second-instance', () => {
 
 app.whenReady().then(async () => {
   if (!isPrimaryInstance) return;
+  // 独立的 AppUserModelID，避免任务栏把本应用与其它 Electron 应用合并
+  if (process.platform === 'win32') app.setAppUserModelId('com.iphealth.desktop');
   const userData = app.getPath('userData');
   store = new Store(userData);
   nativeTheme.themeSource = 'dark';
