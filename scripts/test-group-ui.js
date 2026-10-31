@@ -66,7 +66,7 @@ app.whenReady().then(async () => {
     width: 1440, height: 900, show: false,
     webPreferences: {
       preload: path.join(__dirname, '..', 'electron', 'preload.js'),
-      contextIsolation: true, nodeIntegration: false, sandbox: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   });
   const errs = [];
@@ -193,6 +193,75 @@ app.whenReady().then(async () => {
     return JSON.stringify({ hidden });
   })()`));
   check('侧栏可折叠/展开', r.hidden === true, r);
+
+  /* 全选只作用于可见行 */
+  r = JSON.parse(await run(`(() => {
+    resetFilters();
+    state.filters.protocols = ['ss'];
+    applyFilters();
+    const head = document.querySelector('#checkAll');
+    head.checked = true;
+    head.dispatchEvent(new Event('change'));
+    return JSON.stringify({
+      selected: state.selected.size,
+      visible: [...document.querySelectorAll('#tbody tr')].filter(t => t.style.display !== 'none').length,
+      moveEnabled: !document.querySelector('#btnMoveGroup').disabled,
+    });
+  })()`));
+  check('全选只选中可见行', r.selected === r.visible && r.visible > 0, r);
+  check('有选中时「移动到分组」可用', r.moveEnabled === true, r);
+
+  /* 半选状态 */
+  r = JSON.parse(await run(`(() => {
+    const vis = visibleNodes();
+    state.selected.delete(vis[0].id);
+    updateSelInfo();
+    const head = document.querySelector('#checkAll');
+    return JSON.stringify({ checked: head.checked, indeterminate: head.indeterminate });
+  })()`));
+  check('部分选中时表头为半选', r.checked === false && r.indeterminate === true, r);
+
+  /* 无匹配空态 */
+  r = JSON.parse(await run(`(() => {
+    resetFilters();
+    state.filters.countries = ['ZZ'];
+    applyFilters();
+    return JSON.stringify({
+      noMatch: document.querySelector('#noMatchState').classList.contains('show'),
+      empty: document.querySelector('#emptyState').classList.contains('show'),
+    });
+  })()`));
+  check('筛选无结果时显示「无匹配」空态', r.noMatch === true && r.empty === false, r);
+
+  /* 分组消失后自动回退筛选 */
+  r = JSON.parse(await run(`(() => {
+    resetFilters();
+    state.filters.group = '香港';
+    applyFilters();
+    state.nodes.forEach(n => { if (n.group === '香港') n.group = '改名了'; });
+    applyFilters();
+    return JSON.stringify({ group: state.filters.group });
+  })()`));
+  check('分组消失后筛选自动回退到全部', r.group === 'all', r);
+
+  /* 清除筛选按钮 */
+  r = JSON.parse(await run(`(() => {
+    state.filters.countries = ['ZZ'];
+    applyFilters();
+    document.querySelector('#btnClearFilters').click();
+    return JSON.stringify({
+      noMatch: document.querySelector('#noMatchState').classList.contains('show'),
+      badge: document.querySelector('#filterCount').textContent,
+    });
+  })()`));
+  check('空态里的「清除筛选」可用', r.noMatch === false && r.badge === '0', r);
+
+  /* GBK 解码回退 */
+  const { decodeBuffer } = require('../electron/lib/subscribe');
+  const gbkBuf = Buffer.from([0xb8, 0xdb, 0xbd, 0xda, 0xbd, 0xda, 0xb5, 0xe3]);
+  const gbkText = decodeBuffer(gbkBuf);
+  check('GBK 编码内容可回退解码', gbkText.length > 0 && !gbkText.includes('\uFFFD'), gbkText);
+  check('UTF-8 内容不受影响', decodeBuffer(Buffer.from('香港节点', 'utf8')) === '香港节点', null);
 
   check('无脚本错误', errs.length === 0, errs);
 

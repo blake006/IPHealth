@@ -92,7 +92,7 @@ app.whenReady().then(async () => {
       preload: path.join(__dirname, '..', 'electron', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
   await win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));

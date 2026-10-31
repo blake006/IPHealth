@@ -172,8 +172,9 @@ class CoreManager {
         }
       });
 
-      // 等待 external-controller 就绪
-      const ok = await this.waitReady(15000);
+      // 等待 external-controller 就绪（节点越多，内核启动越慢）
+      const readyTimeout = Math.min(60000, 15000 + nodes.length * 20);
+      const ok = await this.waitReady(readyTimeout);
       if (!ok) {
         const log = this.readLog();
         await this.stop();

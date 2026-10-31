@@ -11,6 +11,12 @@ const { Runner } = require('./lib/runner');
 
 const isDev = process.argv.includes('--dev');
 
+// 只允许运行一个实例，避免两个窗口同时读写同一份节点数据
+const isPrimaryInstance = app.requestSingleInstanceLock();
+if (!isPrimaryInstance) {
+  app.quit();
+}
+
 let win = null;
 let store = null;
 let core = null;
@@ -37,18 +43,52 @@ function resolveCorePath() {
 /* 订阅拉取                                                            */
 /* ------------------------------------------------------------------ */
 
-const { fetchSubscription } = require('./lib/subscribe');
+const { fetchSubscription, decodeBuffer } = require('./lib/subscribe');
 
 /* ------------------------------------------------------------------ */
 /* 窗口                                                                */
 /* ------------------------------------------------------------------ */
 
+/** 读取上次窗口位置/大小，并做越界校正（换显示器后不会跑到屏幕外） */
+function loadWindowState() {
+  try {
+    const saved = store.read('settings.json', {});
+    const b = saved.windowBounds;
+    if (!b || typeof b.width !== 'number' || typeof b.height !== 'number') return {};
+    const { screen } = require('electron');
+    const area = screen.getPrimaryDisplay().workArea;
+    const out = { width: Math.max(1080, Math.min(b.width, area.width)), height: Math.max(660, Math.min(b.height, area.height)) };
+    if (typeof b.x === 'number' && typeof b.y === 'number') {
+      const visible = b.x < area.x + area.width - 120 && b.x + 200 > area.x && b.y < area.y + area.height - 80 && b.y + 80 > area.y;
+      if (visible) {
+        out.x = b.x;
+        out.y = b.y;
+      }
+    }
+    return { bounds: out, maximized: !!saved.maximized };
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveWindowState() {
+  try {
+    if (!win || win.isDestroyed()) return;
+    const saved = store.read('settings.json', {});
+    saved.windowBounds = win.getNormalBounds ? win.getNormalBounds() : win.getBounds();
+    saved.maximized = win.isMaximized();
+    store.write('settings.json', saved);
+  } catch (e) {}
+}
+
 function createWindow() {
+  const state = loadWindowState();
   win = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1080,
     minHeight: 660,
+    ...(state.bounds || {}),
     show: false,
     backgroundColor: '#0e1015',
     titleBarStyle: 'hidden',
@@ -61,16 +101,19 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       spellcheck: false,
     },
   });
 
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.once('ready-to-show', () => {
+    if (state.maximized) win.maximize();
     win.show();
     if (isDev) win.webContents.openDevTools({ mode: 'detach' });
   });
+
+  win.on('close', saveWindowState);
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -82,7 +125,15 @@ function createWindow() {
 /* 初始化                                                              */
 /* ------------------------------------------------------------------ */
 
+app.on('second-instance', () => {
+  if (win && !win.isDestroyed()) {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  }
+});
+
 app.whenReady().then(async () => {
+  if (!isPrimaryInstance) return;
   const userData = app.getPath('userData');
   store = new Store(userData);
   nativeTheme.themeSource = 'dark';
@@ -108,7 +159,14 @@ app.on('window-all-closed', async () => {
 });
 
 app.on('before-quit', async () => {
-  if (core) await core.stop();
+  if (core) {
+    const cfg = core.configPath;
+    await core.stop();
+    // 配置文件里有节点密码，退出时清掉
+    try {
+      if (cfg && fs.existsSync(cfg)) fs.rmSync(cfg, { force: true });
+    } catch (e) {}
+  }
 });
 
 /* ------------------------------------------------------------------ */
@@ -167,9 +225,9 @@ ipcMain.handle('import:file', async () => {
   });
   if (r.canceled || !r.filePaths.length) return null;
   const file = r.filePaths[0];
-  const text = fs.readFileSync(file, 'utf8');
+  const text = decodeBuffer(fs.readFileSync(file));
   const res = parser.parseText(text, { group: path.basename(file), source: file });
-  return { file, text, ...res };
+  return { file, nodes: res.nodes, errors: res.errors, format: res.format };
 });
 
 ipcMain.handle('test:run', async (e, payload) => {

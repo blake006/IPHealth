@@ -61,7 +61,7 @@ app.whenReady().then(async () => {
     width: 1440, height: 900, show: false,
     webPreferences: {
       preload: path.join(__dirname, '..', 'electron', 'preload.js'),
-      contextIsolation: true, nodeIntegration: false, sandbox: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
     },
   });
   const errors = [];

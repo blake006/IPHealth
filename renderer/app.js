@@ -131,14 +131,40 @@ function nodeVisible(n) {
 
 /** 重新计算所有筛选相关的显示（行可见性 / 条件条 / 分面计数 / 状态计数） */
 function applyFilters() {
+  // 分组被删除/同步后消失时，自动回退到「全部」，避免停在空分组上
+  const g = state.filters.group;
+  if (g !== 'all' && g !== 'none' && !state.nodes.some((n) => (n.group || '') === g)) {
+    state.filters.group = 'all';
+  }
+
+  let visible = 0;
   for (const tr of rowMap.values()) {
     const n = tr.__node;
-    if (n) tr.style.display = matchesFilters(n) ? '' : 'none';
+    if (!n) continue;
+    const show = matchesFilters(n);
+    tr.style.display = show ? '' : 'none';
+    if (show) visible += 1;
   }
+
+  refreshEmptyStates(visible);
+
   renderActiveFilters();
   updateFilterBadge();
   renderSidebar();
   updateStatusCounts();
+}
+
+function refreshEmptyStates(visibleCount) {
+  const total = state.nodes.length;
+  const empty = $('#emptyState');
+  const noMatch = $('#noMatchState');
+  if (empty) empty.classList.toggle('show', total === 0);
+  if (noMatch) noMatch.classList.toggle('show', total > 0 && visibleCount === 0);
+}
+
+/** 当前筛选下可见的节点 */
+function visibleNodes() {
+  return state.nodes.filter((n) => matchesFilters(n));
 }
 
 let afPending = false;
@@ -314,6 +340,7 @@ function rowHtml(n) {
       </div>
     </td>
     <td class="col-server mono dim" title="${esc(n.server)}">${esc(n.server)}:${n.port}</td>
+    <td class="col-group" data-cell="group">${groupHtml(n)}</td>
     <td class="col-num" data-cell="latency">${fmtLatency(n.latency)}</td>
     <td class="col-num dim" data-cell="jitter">${n.jitter != null ? n.jitter + ' ms' : '—'}</td>
     <td class="col-num" data-cell="speed">${fmtSpeed(n.speed)}</td>
@@ -346,6 +373,11 @@ function locHtml(n) {
   return `${flag}${esc(main)}${sub ? `<span class="dim" style="margin-left:6px;font-size:11.5px">${esc(sub)}</span>` : ''}`;
 }
 
+function groupHtml(n) {
+  if (!n.group) return '<span class="dim">—</span>';
+  return `<span class="tag-mini" title="${esc(n.group)}">${esc(n.group)}</span>`;
+}
+
 function healthHtml(n) {
   if (n.health == null) return '<span class="dim" style="font-size:11.5px">—</span>';
   const c = healthColor(n.health);
@@ -373,7 +405,6 @@ function renderTable() {
   }
   tbody.innerHTML = '';
   tbody.appendChild(frag);
-  $('#emptyState').classList.toggle('show', list.length === 0);
   updateStats();
   applyFilters();
   updateSelInfo();
@@ -393,10 +424,21 @@ function updateRow(n) {
   set('jitter', n.jitter != null ? n.jitter + ' ms' : '—');
   set('speed', fmtSpeed(n.speed));
   set('ip', n.ip ? esc(n.ip) : '<span class="dim">—</span>');
+  set('group', groupHtml(n));
   set('loc', locHtml(n));
   set('isp', esc(n.isp || '—'));
   set('health', healthHtml(n));
-  tr.style.display = nodeVisible(n) ? '' : 'none';
+
+  const show = nodeVisible(n);
+  const wasShown = tr.style.display !== 'none';
+  if (show !== wasShown) {
+    tr.style.display = show ? '' : 'none';
+    let visible = 0;
+    for (const row of rowMap.values()) {
+      if (row.style.display !== 'none') visible += 1;
+    }
+    refreshEmptyStates(visible);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -406,8 +448,6 @@ function updateRow(n) {
 function updateStats() {
   const total = state.nodes.length;
   const ok = state.nodes.filter((n) => n.status === 'ok');
-  const fail = state.nodes.filter((n) => n.status === 'fail').length;
-  const idle = state.nodes.filter((n) => n.status === 'idle').length;
 
   $('#stTotal').textContent = total;
   $('#stTotalHint').textContent = total ? `${new Set(state.nodes.map((n) => n.type)).size} 种协议` : '等待导入';
@@ -445,19 +485,23 @@ function updateStats() {
     $('#stHealthHint').textContent = '优秀 0 个';
   }
 
-  $('#cAll').textContent = total;
-  $('#cOk').textContent = ok.length;
-  $('#cFail').textContent = fail;
-  $('#cIdle').textContent = idle;
 }
 
 function updateSelInfo() {
   const n = state.selected.size;
+  const vis = visibleNodes();
+  const visSel = vis.filter((x) => state.selected.has(x.id)).length;
+
   $('#selInfo').textContent = n ? `已选择 ${n} 项` : '';
   $('#selCount').textContent = `已选 ${n}`;
   $('#btnDeleteSel').disabled = n === 0;
-  const all = state.nodes.length > 0 && n === state.nodes.length;
-  $('#checkAll').checked = all;
+  const mv = $('#btnMoveGroup');
+  if (mv) mv.disabled = n === 0;
+
+  const all = vis.length > 0 && visSel === vis.length;
+  const head = $('#checkAll');
+  head.checked = all;
+  head.indeterminate = visSel > 0 && !all;
 }
 
 /* ------------------------------------------------------------------ */
@@ -470,7 +514,7 @@ function sbRow(opts) {
   const { label, count, active, value, facet, more } = opts;
   const zero = count === 0 && !active ? ' zero' : '';
   return `<div class="sb-item${active ? ' active' : ''}${zero}" data-facet="${facet}" data-value="${esc(value)}" title="${esc(label)}">
-      <span class="sb-name">${label}</span>
+      <span class="sb-name">${esc(label)}</span>
       <span class="sb-num">${count}</span>
       ${more ? `<button class="icon-mini sb-more" data-gmore="${esc(value)}" title="分组操作">
         <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
@@ -498,7 +542,7 @@ function renderSidebar() {
   let html = sbRow({ label: '全部节点', count: allCount, active: f.group === 'all', value: 'all', facet: 'group' });
   html += sbRow({ label: '未分组', count: ungrouped, active: f.group === 'none', value: 'none', facet: 'group' });
   html += groups
-    .map((g) => sbRow({ label: esc(g), count: gCounts.get(g) || 0, active: f.group === g, value: g, facet: 'group', more: true }))
+    .map((g) => sbRow({ label: g, count: gCounts.get(g) || 0, active: f.group === g, value: g, facet: 'group', more: true }))
     .join('');
   $('#groupList').innerHTML = html;
 
@@ -1123,6 +1167,14 @@ async function runTest(mode, onlySelected) {
   updateStats();
 }
 
+let lastStatsAt = 0;
+function maybeUpdateStats(force) {
+  const now = Date.now();
+  if (!force && now - lastStatsAt < 150) return;
+  lastStatsAt = now;
+  updateStats();
+}
+
 function handleTestEvent(ev) {
   if (ev.type === 'run-start') {
     state.progress = { finished: 0, total: ev.total };
@@ -1142,14 +1194,14 @@ function handleTestEvent(ev) {
       const pct = ev.total ? Math.round((ev.finished / ev.total) * 100) : 0;
       $('#progressBar').style.width = pct + '%';
       $('#statusText').textContent = `检测中 ${ev.finished}/${ev.total} · ${node.name}`;
-      updateStats();
+      maybeUpdateStats();
     } else {
-      updateStats();
+      maybeUpdateStats();
     }
   } else if (ev.type === 'run-end') {
     $('#statusText').textContent = ev.aborted ? '已停止' : `检测完成 ${ev.finished}/${ev.total}`;
     $('#progressBar').style.width = '100%';
-    updateStats();
+    maybeUpdateStats(true);
   }
 }
 
@@ -1370,6 +1422,7 @@ $('#btnImport').addEventListener('click', () => {
   setTimeout(() => $('#batchInput').focus(), 60);
 });
 $('#btnEmptyImport').addEventListener('click', () => $('#btnImport').click());
+$('#btnClearFilters').addEventListener('click', resetFilters);
 
 $('#batchInput').addEventListener('input', updateBatchCount);
 
@@ -1633,8 +1686,9 @@ $$('.grid thead th.sortable').forEach((th) => {
 });
 
 $('#checkAll').addEventListener('change', (e) => {
-  if (e.target.checked) state.nodes.forEach((n) => state.selected.add(n.id));
-  else state.selected.clear();
+  const vis = visibleNodes();
+  if (e.target.checked) vis.forEach((n) => state.selected.add(n.id));
+  else vis.forEach((n) => state.selected.delete(n.id));
   renderTable();
 });
 
@@ -1673,14 +1727,17 @@ $('#tbody').addEventListener('click', async (e) => {
   if (tr) openDrawer(tr.dataset.id);
 });
 
-$('#btnDeleteSel').addEventListener('click', () => {
-  if (!state.selected.size) return;
-  state.nodes = state.nodes.filter((n) => !state.selected.has(n.id));
+function deleteSelected() {
+  if (!state.selected.size) return toast('请先选择节点', 'err');
+  const n = state.selected.size;
+  state.nodes = state.nodes.filter((x) => !state.selected.has(x.id));
   state.selected.clear();
   saveNodes();
   renderTable();
-  toast('已删除选中节点', 'ok');
-});
+  toast(`已删除 ${n} 个节点`, 'ok');
+}
+
+$('#btnDeleteSel').addEventListener('click', deleteSelected);
 
 $('#btnClear').addEventListener('click', () => {
   if (!state.nodes.length) return;
@@ -1711,6 +1768,26 @@ document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
     e.preventDefault();
     $('#btnImport').click();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    $('#searchInput').focus();
+    $('#searchInput').select();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    e.preventDefault();
+    visibleNodes().forEach((n) => state.selected.add(n.id));
+    renderTable();
+  }
+  if (e.key === 'Delete') {
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (state.selected.size) {
+      e.preventDefault();
+      deleteSelected();
+    }
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     e.preventDefault();

@@ -58,13 +58,33 @@ function fetchUrl(url, uaIndex = 0, redirects = 0) {
           }
           chunks.push(c);
         });
-        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        res.on('end', () => resolve(decodeBuffer(Buffer.concat(chunks))));
       }
     );
     req.on('timeout', () => req.destroy(new Error('订阅拉取超时')));
     req.on('error', (e) => reject(e));
     req.end();
   });
+}
+
+/**
+ * 按 UTF-8 解码；出现替换字符时回退到 GBK
+ * （国内不少订阅/配置文件是 GBK/ANSI 编码）
+ */
+function decodeBuffer(buf) {
+  if (!buf) return '';
+  let text = buf.toString('utf8');
+  if (text.includes('\uFFFD')) {
+    try {
+      const gbk = new TextDecoder('gbk', { fatal: false }).decode(buf);
+      // 只有 GBK 结果明显更"干净"时才采用
+      const bad = (t) => (t.match(/\uFFFD/g) || []).length;
+      if (gbk && bad(gbk) < bad(text)) text = gbk;
+    } catch (e) {
+      /* 环境不支持 gbk 时忽略 */
+    }
+  }
+  return text;
 }
 
 /** 依次尝试多个 User-Agent，兼容 Clash / V2Ray / 通用订阅 */
@@ -83,4 +103,4 @@ async function fetchSubscription(url) {
   throw lastErr || new Error('订阅拉取失败');
 }
 
-module.exports = { fetchSubscription, fetchUrl, SUB_UA };
+module.exports = { fetchSubscription, fetchUrl, decodeBuffer, SUB_UA };

@@ -222,6 +222,7 @@
               <th class="col-status"></th>
               <th class="col-name sortable" data-sort="name">名称 / 协议</th>
               <th class="col-server sortable" data-sort="server">服务器</th>
+              <th class="col-group sortable" data-sort="group">分组</th>
               <th class="col-num sortable" data-sort="latency">延迟</th>
               <th class="col-num">抖动</th>
               <th class="col-num sortable" data-sort="speed">速度</th>
@@ -241,6 +242,14 @@
           <div class="empty-title">还没有代理节点</div>
           <div class="empty-desc">点击「导入代理」，支持单条链接、批量链接、订阅地址、Clash 配置与文件导入</div>
           <button class="btn btn-primary" id="btnEmptyImport">导入代理</button>
+        </div>
+        <div class="empty" id="noMatchState">
+          <div class="empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3" stroke-linecap="round"/></svg>
+          </div>
+          <div class="empty-title">没有符合筛选条件的节点</div>
+          <div class="empty-desc">调整左侧分组 / 协议 / 地区，或修改「筛选」里的条件</div>
+          <button class="btn" id="btnClearFilters">清除全部筛选</button>
         </div>
       </div>
       </section>
