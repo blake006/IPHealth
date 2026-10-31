@@ -13,6 +13,7 @@
     group: 'all', // all | none | 分组名
     protocols: [], // 协议 type 列表
     countries: [], // 国家码列表（空字符串代表未知）
+    sources: [], // 订阅源标识（订阅 URL 或文件名，空字符串代表手动添加）
     ipTypes: [], // residential | hosting | proxy | mobile | unknown
     minHealth: null,
     maxLatency: null,
@@ -24,6 +25,7 @@
     const out = Object.assign({}, EMPTY, f || {});
     out.protocols = Array.from(out.protocols || []);
     out.countries = Array.from(out.countries || []);
+    out.sources = Array.from(out.sources || []);
     out.ipTypes = Array.from(out.ipTypes || []);
     if (out.group == null) out.group = 'all';
     return out;
@@ -42,9 +44,28 @@
     return (n.countryCode || '').toUpperCase();
   }
 
+  /** 订阅源标识：订阅 URL / 导入文件名；手动添加的节点为空 */
+  function sourceKey(n) {
+    return n.source || '';
+  }
+
+  /** 订阅源的展示名：URL 取主机名，文件取文件名 */
+  function sourceLabel(source) {
+    if (!source) return '手动添加';
+    const s = String(source);
+    if (/^https?:\/\//i.test(s)) {
+      try {
+        return new URL(s).hostname;
+      } catch (e) {
+        return s;
+      }
+    }
+    return s.split(/[\\/]/).pop() || s;
+  }
+
   function textMatch(n, q) {
     if (!q) return true;
-    const hay = [n.name, n.server, n.country, n.city, n.isp, n.asn, n.ip, n.type, n.group]
+    const hay = [n.name, n.server, n.country, n.city, n.isp, n.asn, n.ip, n.type, n.group, sourceLabel(n.source)]
       .join(' ')
       .toLowerCase();
     return hay.includes(q.toLowerCase());
@@ -73,6 +94,8 @@
     if (skip !== 'protocols' && c.protocols.length && !c.protocols.includes(n.type)) return false;
 
     if (skip !== 'countries' && c.countries.length && !c.countries.includes(countryKey(n))) return false;
+
+    if (skip !== 'sources' && c.sources.length && !c.sources.includes(n.source || '')) return false;
 
     if (skip !== 'ipTypes' && c.ipTypes.length && !c.ipTypes.includes(ipTypeKey(n))) return false;
 
@@ -106,6 +129,7 @@
       c.group !== 'all' ||
       c.protocols.length > 0 ||
       c.countries.length > 0 ||
+      c.sources.length > 0 ||
       c.ipTypes.length > 0 ||
       c.minHealth != null ||
       c.maxLatency != null ||
@@ -122,11 +146,12 @@
     if (c.group !== 'all') n += 1;
     if (c.protocols.length) n += 1;
     if (c.countries.length) n += 1;
+    if (c.sources.length) n += 1;
     if (c.ipTypes.length) n += 1;
     if (c.minHealth != null || c.maxLatency != null || c.minSpeed != null || c.dnsblOnly) n += 1;
     if (query) n += 1;
     return n;
   }
 
-  return { EMPTY, normalize, matches, facetCounts, isActive, activeCount, ipTypeKey, countryKey };
+  return { EMPTY, normalize, matches, facetCounts, isActive, activeCount, ipTypeKey, countryKey, sourceKey, sourceLabel };
 });

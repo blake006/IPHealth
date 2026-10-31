@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('api', {
   cancelTest: () => ipcRenderer.invoke('test:cancel'),
 
   exportFile: (payload) => ipcRenderer.invoke('export:save', payload),
+  exportClash: (payload) => ipcRenderer.invoke('export:clash', payload),
+  copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   openExternal: (url) => ipcRenderer.invoke('shell:open', url),
   openDataDir: () => ipcRenderer.invoke('app:openDataDir'),
   setTheme: (theme) => ipcRenderer.invoke('theme:set', theme),
@@ -23,6 +25,11 @@ contextBridge.exposeInMainWorld('api', {
     const handler = (_e, ev) => cb(ev);
     ipcRenderer.on('test:event', handler);
     return () => ipcRenderer.removeListener('test:event', handler);
+  },
+  onSecondInstance: (cb) => {
+    const handler = (_e, info) => cb(info);
+    ipcRenderer.on('app:second-instance', handler);
+    return () => ipcRenderer.removeListener('app:second-instance', handler);
   },
   onCoreLog: (cb) => {
     const handler = (_e, msg) => cb(msg);

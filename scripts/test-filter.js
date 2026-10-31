@@ -176,4 +176,43 @@ t('normalize 把 Set 转成数组且补全字段', () => {
   assert.strictEqual(f.group, 'all');
 });
 
+t('来源维度：按订阅源过滤', () => {
+  const list = [
+    n({ id: 's1', source: 'https://a.example.com/sub?token=1' }),
+    n({ id: 's2', source: 'https://b.example.com/sub' }),
+    n({ id: 's3', source: '' }),
+  ];
+  const f = base();
+  f.sources = ['https://a.example.com/sub?token=1'];
+  assert.deepStrictEqual(list.filter((x) => F.matches(x, f, '')).map((x) => x.id), ['s1']);
+
+  f.sources = ['https://a.example.com/sub?token=1', 'https://b.example.com/sub'];
+  assert.deepStrictEqual(list.filter((x) => F.matches(x, f, '')).map((x) => x.id), ['s1', 's2']);
+
+  // 空字符串代表手动添加
+  f.sources = [''];
+  assert.deepStrictEqual(list.filter((x) => F.matches(x, f, '')).map((x) => x.id), ['s3']);
+
+  assert.strictEqual(F.isActive(f, ''), true);
+  assert.strictEqual(F.activeCount(f, ''), 1);
+});
+
+t('来源展示名与分面计数', () => {
+  assert.strictEqual(F.sourceLabel('https://a.example.com/sub?token=1'), 'a.example.com');
+  assert.strictEqual(F.sourceLabel('D:////proxies////list.txt'), 'list.txt');
+  assert.strictEqual(F.sourceLabel(''), '手动添加');
+  assert.strictEqual(F.sourceKey({ source: 'x' }), 'x');
+  assert.strictEqual(F.sourceKey({}), '');
+
+  const list = [n({ id: 'a', source: 'u1' }), n({ id: 'b', source: 'u1' }), n({ id: 'c', source: 'u2' })];
+  const counts = F.facetCounts(list, base(), '', 'sources', (x) => F.sourceKey(x));
+  assert.strictEqual(counts.get('u1'), 2);
+  assert.strictEqual(counts.get('u2'), 1);
+});
+
+t('搜索命中订阅源主机名', () => {
+  const list = [n({ id: 'a', name: 'X', source: 'https://ghost.example.com/sub' })];
+  assert.strictEqual(list.filter((x) => F.matches(x, base(), 'ghost')).length, 1);
+});
+
 console.log(`\n通过 ${pass} 项`);

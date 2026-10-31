@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -8,8 +8,12 @@ const { Store, DEFAULT_SETTINGS } = require('./lib/store');
 const parser = require('./lib/parser');
 const { CoreManager } = require('./lib/core');
 const { Runner } = require('./lib/runner');
+const clash = require('./lib/clash');
 
 const isDev = process.argv.includes('--dev');
+
+// 进程/窗口层面统一使用 IPHealth 这个名称
+app.setName('IPHealth');
 
 // 只允许运行一个实例，避免两个窗口同时读写同一份节点数据
 const isPrimaryInstance = app.requestSingleInstanceLock();
@@ -138,6 +142,11 @@ app.on('second-instance', () => {
   if (win && !win.isDestroyed()) {
     if (win.isMinimized()) win.restore();
     win.focus();
+    // 告诉界面「你点的那份没起来，已经在跑的是这一份」，避免误以为新版本没生效
+    win.webContents.send('app:second-instance', {
+      version: app.getVersion(),
+      execPath: process.execPath,
+    });
   }
 });
 
@@ -196,6 +205,8 @@ ipcMain.handle('app:info', async () => {
     corePath: core.corePath,
     coreFound: fs.existsSync(core.corePath),
     userData: app.getPath('userData'),
+    execPath: process.execPath,
+    isPackaged: app.isPackaged,
   };
 });
 
@@ -292,6 +303,34 @@ ipcMain.handle('export:save', async (e, payload) => {
   if (r.canceled || !r.filePath) return { ok: false };
   fs.writeFileSync(r.filePath, content, 'utf8');
   return { ok: true, path: r.filePath };
+});
+
+/** 导出为 Clash / mihomo 配置（YAML），只做格式转换与落盘 */
+ipcMain.handle('export:clash', async (e, payload) => {
+  const { nodes, defaultName, opts } = payload || {};
+  let built;
+  try {
+    built = clash.buildClashYaml(nodes || [], opts || {});
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  const r = await dialog.showSaveDialog(win, {
+    title: '导出 Clash 配置',
+    defaultPath: defaultName || 'iphealth-clash',
+    filters: [{ name: 'Clash 配置', extensions: ['yaml', 'yml'] }],
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try {
+    fs.writeFileSync(r.filePath, built.text, 'utf8');
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  return { ok: true, path: r.filePath, count: built.count };
+});
+
+ipcMain.handle('clipboard:write', (e, text) => {
+  clipboard.writeText(String(text == null ? '' : text));
+  return true;
 });
 
 ipcMain.handle('theme:set', (e, theme) => {

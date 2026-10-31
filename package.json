@@ -1,7 +1,7 @@
 {
   "name": "iphealth",
   "productName": "IPHealth",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "代理池 IP 健康度检测工具 - 导入代理/代理链接，测速、测延迟、测 IP 健康度与归属地",
   "main": "electron/main.js",
   "author": {
@@ -18,6 +18,8 @@
     "dist": "electron-builder --win zip",
     "dist:zip": "electron-builder --win zip",
     "dist:exe": "node scripts/build-exe.js",
+    "test": "node scripts/test-parser.js && node scripts/test-filter.js && node scripts/test-merge.js && node scripts/test-clash.js",
+    "verify-exe": "node scripts/verify-exe.js",
     "fetch-rcedit": "node scripts/fetch-rcedit.js"
   },
   "dependencies": {

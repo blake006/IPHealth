@@ -25,6 +25,7 @@ const state = {
     group: 'all',
     protocols: [],
     countries: [],
+    sources: [],
     ipTypes: [],
     minHealth: null,
     maxLatency: null,
@@ -221,6 +222,12 @@ function renderActiveFilters() {
       applyFilters();
     });
   }
+  if (f.sources.length) {
+    add(`来源：${f.sources.map((s) => window.IPHFilter.sourceLabel(s)).join(' / ')}`, () => {
+      state.filters.sources = [];
+      applyFilters();
+    });
+  }
   if (f.ipTypes.length) {
     const map = { residential: '住宅', hosting: '机房', proxy: '代理', mobile: '移动', unknown: '未知' };
     add(`IP 类型：${f.ipTypes.map((t) => map[t] || t).join(' / ')}`, () => {
@@ -278,6 +285,7 @@ function resetFilters() {
     group: 'all',
     protocols: [],
     countries: [],
+    sources: [],
     ipTypes: [],
     minHealth: null,
     maxLatency: null,
@@ -536,6 +544,8 @@ function renderSidebar() {
     $('#groupList').innerHTML = '<div class="sb-empty">还没有节点</div>';
     $('#protoList').innerHTML = '<div class="sb-empty">—</div>';
     $('#countryList').innerHTML = '<div class="sb-empty">—</div>';
+    $('#sourceList').innerHTML = '';
+    $('#sourceBlock').style.display = 'none';
     return;
   }
 
@@ -595,6 +605,26 @@ function renderSidebar() {
       <span class="sb-name">显示全部 ${countries.length} 个地区</span></div>`;
   }
   $('#countryList').innerHTML = cHtml || '<div class="sb-empty">暂无归属地数据</div>';
+
+  /* 来源（订阅源 / 导入文件） */
+  const sCounts = F.facetCounts(state.nodes, f, state.query, 'sources', (n) => F.sourceKey(n));
+  const srcKeys = [...sCounts.keys()];
+  const hasSource = srcKeys.some(Boolean) || f.sources.length > 0;
+  $('#sourceBlock').style.display = hasSource ? '' : 'none';
+  if (hasSource) {
+    const srcs = srcKeys.sort((a, b) => (sCounts.get(b) || 0) - (sCounts.get(a) || 0));
+    $('#sourceList').innerHTML = srcs
+      .map((src) =>
+        sbRow({
+          label: F.sourceLabel(src),
+          count: sCounts.get(src) || 0,
+          active: f.sources.includes(src),
+          value: src,
+          facet: 'sources',
+        })
+      )
+      .join('');
+  }
 }
 
 /** 侧栏点击 */
@@ -616,12 +646,14 @@ function bindSidebar() {
       toggleFacet('protocols', value);
     } else if (facet === 'countries') {
       toggleFacet('countries', value);
+    } else if (facet === 'sources') {
+      toggleFacet('sources', value);
     } else if (facet === 'countries-more') {
       state.countryLimit = 999;
       renderSidebar();
     }
   };
-  ['#groupList', '#protoList', '#countryList'].forEach((sel) => {
+  ['#groupList', '#protoList', '#countryList', '#sourceList'].forEach((sel) => {
     const el = $(sel);
     el.removeEventListener('click', onClick);
     el.addEventListener('click', onClick);
@@ -1141,11 +1173,22 @@ function setRunning(on) {
   }
 }
 
-async function runTest(mode, onlySelected) {
+async function runTest(mode, onlySelected, scope) {
   if (state.running) return toast('已有检测任务在进行', 'err');
   if (state.syncing) return toast('正在更新订阅，请稍后再检测', 'err');
-  let targets = onlySelected ? state.nodes.filter((n) => state.selected.has(n.id)) : state.nodes.slice();
-  if (!targets.length) return toast(onlySelected ? '请先选择节点' : '没有可检测的节点', 'err');
+  let targets;
+  if (scope === 'pending') {
+    targets = state.nodes.filter((n) => n.status === 'idle' || n.status === 'testing');
+  } else if (scope === 'failed') {
+    targets = state.nodes.filter((n) => n.status === 'fail');
+  } else {
+    targets = onlySelected ? state.nodes.filter((n) => state.selected.has(n.id)) : state.nodes.slice();
+  }
+  if (!targets.length) {
+    if (scope === 'pending') return toast('没有未检测的节点', 'err');
+    if (scope === 'failed') return toast('没有检测失败的节点', 'err');
+    return toast(onlySelected ? '请先选择节点' : '没有可检测的节点', 'err');
+  }
 
   targets.forEach((n) => {
     n.status = 'testing';
@@ -1374,6 +1417,7 @@ async function init() {
     <div><b>内核</b> <code>${esc(info.coreVersion || '未检测到')}</code></div>
     <div><b>内核路径</b> <code>${esc(info.corePath)}</code></div>
     <div><b>数据目录</b> <code>${esc(info.userData)}</code> <a href="#" id="openData" style="color:var(--accent)">打开</a></div>
+    <div><b>运行文件</b> <code>${esc(info.execPath || '')}</code>${info.isPackaged ? '' : ' <span style="color:var(--warn,#f5a524)">（开发模式运行，任务管理器里会显示 Electron）</span>'}</div>
   `;
 
   const settings = await window.api.getStore('settings');
@@ -1399,6 +1443,12 @@ async function init() {
   renderSources();
 
   window.api.onTestEvent(handleTestEvent);
+
+  if (window.api.onSecondInstance) {
+    window.api.onSecondInstance((info) => {
+      toast(`IPHealth v${info.version} 已在运行，本次启动已合并到已有窗口`, 'err');
+    });
+  }
 
   // 启动时自动更新订阅
   if (state.settings.autoSyncOnStart && state.sources.length) {
@@ -1504,7 +1554,9 @@ $$('#testMenu button').forEach((b) => {
   b.addEventListener('click', () => {
     $('#testMenu').classList.remove('open');
     const mode = b.dataset.mode;
-    if (mode === 'selected') runTest('full', true);
+    const scope = b.dataset.scope;
+    if (scope) runTest('full', false, scope);
+    else if (mode === 'selected') runTest('full', true);
     else runTest(mode, false);
   });
 });
@@ -1638,16 +1690,52 @@ $('#btnTheme').addEventListener('click', async () => {
 });
 
 $('#btnExport').addEventListener('click', async () => {
-  const format = await chooseExportFormat();
-  if (!format) return;
-  const content = buildExport(format);
+  const choice = await chooseExportFormat();
+  if (!choice) return;
+  if (choice === 'clash') return exportClashConfig();
+  if (choice === 'copy') return copyVisibleLinks();
+  const content = buildExport(choice);
   const r = await window.api.exportFile({
-    format,
+    format: choice,
     content,
     defaultName: 'iphealth-' + new Date().toISOString().slice(0, 10),
   });
   if (r && r.ok) toast('已导出到 ' + r.path, 'ok');
 });
+
+/** 当前筛选结果（无筛选时退回全部） */
+function exportScope() {
+  const visible = sortedNodes().filter((n) => matchesFilters(n));
+  return visible.length ? visible : state.nodes.slice();
+}
+
+/** 导出 Clash 配置：优先只导出可用节点，一个可用都没有才导出全部 */
+async function exportClashConfig() {
+  const base = exportScope();
+  if (!base.length) return toast('没有可导出的节点', 'err');
+  const alive = base.filter((n) => n.status === 'ok');
+  const list = alive.length ? alive : base;
+  const r = await window.api.exportClash({
+    nodes: list.map((n) => ({
+      id: n.id, name: n.name, type: n.type, server: n.server, port: n.port,
+      conf: n.conf, country: n.country, countryCode: n.countryCode,
+    })),
+    defaultName: 'iphealth-clash-' + new Date().toISOString().slice(0, 10),
+  });
+  if (!r) return;
+  if (r.error) return toast('导出失败：' + r.error, 'err');
+  if (r.canceled) return;
+  toast(`已导出 ${r.count} 个节点${alive.length ? '（仅可用节点）' : '（尚无可用节点，导出全部）'}`, 'ok');
+}
+
+/** 复制当前筛选结果的节点链接 */
+async function copyVisibleLinks() {
+  const list = exportScope();
+  if (!list.length) return toast('没有可复制的节点', 'err');
+  const text = list.map((n) => n.raw || `${n.type}://${n.server}:${n.port}`).join('\n');
+  await window.api.copyText(text);
+  toast(`已复制 ${list.length} 条节点链接`, 'ok');
+}
 
 function chooseExportFormat() {
   return new Promise((resolve) => {
@@ -1655,12 +1743,15 @@ function chooseExportFormat() {
     mask.className = 'modal-mask open';
     mask.style.zIndex = 150;
     mask.innerHTML = `
-      <div class="modal" style="width:380px">
+      <div class="modal" style="width:420px">
         <div class="modal-head"><div class="modal-title">导出检测结果</div></div>
         <div class="modal-body" style="gap:8px">
           <button class="btn" data-fmt="csv" style="justify-content:flex-start">CSV 表格（Excel 可直接打开）</button>
           <button class="btn" data-fmt="json" style="justify-content:flex-start">JSON（含完整字段）</button>
           <button class="btn" data-fmt="txt" style="justify-content:flex-start">原始链接（TXT）</button>
+          <button class="btn" data-fmt="clash" style="justify-content:flex-start">Clash 配置（YAML，可直接导入客户端）</button>
+          <button class="btn" data-fmt="copy" style="justify-content:flex-start">复制节点链接到剪贴板</button>
+          <div class="hint-row" style="padding:2px 2px 0"><span>导出范围 = 当前筛选结果；Clash 配置优先只包含可用节点</span></div>
         </div>
       </div>`;
     mask.addEventListener('click', (e) => {
@@ -1722,22 +1813,85 @@ $('#tbody').addEventListener('click', async (e) => {
     const n = state.nodes.find((x) => x.id === id);
     if (!n) return;
     if (act.dataset.act === 'del') {
-      state.nodes = state.nodes.filter((x) => x.id !== id);
-      state.selected.delete(id);
-      saveNodes();
-      renderTable();
+      deleteNode(id);
     } else if (act.dataset.act === 'detail') {
       openDrawer(id);
     } else if (act.dataset.act === 'test') {
-      if (state.running) return toast('已有检测任务在进行', 'err');
-      state.selected.clear();
-      state.selected.add(id);
-      runTest('full', true);
+      testSingleNode(id);
     }
     return;
   }
   const tr = e.target.closest('tr[data-id]');
   if (tr) openDrawer(tr.dataset.id);
+});
+
+/* ---- 单节点操作（右键菜单 / 行内按钮共用） ---- */
+
+async function copyNodeLink(n) {
+  const text = n.raw || `${n.type}://${n.server}:${n.port}`;
+  await window.api.copyText(text);
+  toast('已复制节点链接', 'ok');
+}
+
+async function copyNodeIp(n) {
+  if (!n.ip) return toast('该节点还没有出口 IP，请先检测', 'err');
+  await window.api.copyText(n.ip);
+  toast('已复制出口 IP', 'ok');
+}
+
+function testSingleNode(id) {
+  if (state.running) return toast('已有检测任务在进行', 'err');
+  state.selected.clear();
+  state.selected.add(id);
+  runTest('full', true);
+}
+
+async function renameNode(id) {
+  const n = state.nodes.find((x) => x.id === id);
+  if (!n) return;
+  const name = await askText('重命名节点', n.name || '', '节点名称');
+  if (!name || name === n.name) return;
+  n.name = name;
+  saveNodes();
+  renderTable();
+  toast('已重命名', 'ok');
+}
+
+function moveNodeToGroup(id) {
+  state.selected.clear();
+  state.selected.add(id);
+  renderMoveGroupPanel();
+  $('#moveGroupPanel').classList.add('open');
+}
+
+function deleteNode(id) {
+  state.nodes = state.nodes.filter((x) => x.id !== id);
+  state.selected.delete(id);
+  saveNodes();
+  renderTable();
+}
+
+$('#tbody').addEventListener('contextmenu', (e) => {
+  const tr = e.target.closest('tr[data-id]');
+  if (!tr) return;
+  e.preventDefault();
+  const n = state.nodes.find((x) => x.id === tr.dataset.id);
+  if (!n) return;
+  showContextMenu(
+    [
+      { label: '节点详情', onClick: () => openDrawer(n.id) },
+      { label: '复制节点链接', onClick: () => copyNodeLink(n) },
+      { label: '复制出口 IP', onClick: () => copyNodeIp(n) },
+      '-',
+      { label: '仅检测此节点', onClick: () => testSingleNode(n.id) },
+      { label: '重命名…', onClick: () => renameNode(n.id) },
+      { label: '移动到分组…', onClick: () => moveNodeToGroup(n.id) },
+      '-',
+      { label: '删除节点', danger: true, onClick: () => deleteNode(n.id) },
+    ],
+    e.clientX,
+    e.clientY
+  );
 });
 
 function deleteSelected() {
