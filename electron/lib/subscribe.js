@@ -90,9 +90,21 @@ function decodeBuffer(buf) {
 
 /** 已知的 DNS 污染 / 黑洞地址（GFW 常用注入 IP） */
 const POISON_IPS = new Set([
-  '93.46.8.90', '46.82.174.69', '8.7.198.45', '37.61.54.158', '159.24.3.173',
-  '10.10.34.34', '10.10.34.35', '10.10.34.36', '127.0.0.1', '0.0.0.0',
+  // GFW 常见的 DNS 注入 / 黑洞地址
+  '93.46.8.90', '46.82.174.69', '59.24.3.174', '159.24.3.173', '159.24.3.174',
+  '8.7.198.45', '37.61.54.158', '78.16.49.15', '4.36.66.178', '203.98.7.65',
+  '207.123.56.89', '243.185.187.39', '10.10.34.34', '10.10.34.35', '10.10.34.36',
+  '127.0.0.1', '0.0.0.0',
 ]);
+
+/** 代理地址规范化：支持 "7890" / "http://127.0.0.1:7890" / "127.0.0.1:7890" */
+function normalizeProxy(input) {
+  let s = String(input || '').trim();
+  if (!s) return '';
+  s = s.replace(/^[a-zA-Z]+:\/\//, '').replace(/\/+$/, '');
+  if (/^\d+$/.test(s)) return `127.0.0.1:${s}`;
+  return s;
+}
 
 /**
  * 用 Electron 的 net 模块拉取（走 Chromium 网络栈）
@@ -203,7 +215,7 @@ async function diagnose(url) {
 
 /** 依次尝试多个 User-Agent，兼容 Clash / V2Ray / 通用订阅 */
 async function fetchSubscription(url, opts = {}) {
-  const proxy = (opts.proxy || '').trim();
+  const proxy = normalizeProxy(opts.proxy);
   let lastErr = null;
 
   // 1) 优先走 Chromium 网络栈：默认跟随系统代理，也可指定本地代理，兼容 HTTP/2
@@ -236,4 +248,4 @@ async function fetchSubscription(url, opts = {}) {
   throw new Error(`${head}。${detail}`);
 }
 
-module.exports = { fetchSubscription, fetchUrl, fetchWithNet, diagnose, decodeBuffer, SUB_UA, POISON_IPS };
+module.exports = { fetchSubscription, fetchUrl, fetchWithNet, diagnose, normalizeProxy, decodeBuffer, SUB_UA, POISON_IPS };
