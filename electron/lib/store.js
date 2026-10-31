@@ -39,6 +39,7 @@ const DEFAULT_SETTINGS = {
   speedSource: 'cloudflare',
   deepHealth: true,
   autoSyncOnStart: false,
+  subProxy: '',
   sidebarHidden: false,
   latencyUrls: [],
   ipUrls: [],

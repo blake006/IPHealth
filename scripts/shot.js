@@ -123,6 +123,13 @@ app.whenReady().then(async () => {
   console.log('saved sources.png');
   await win.webContents.executeJavaScript("document.querySelector('[data-close=sourcesModal]').click();");
 
+  // 设置面板
+  await win.webContents.executeJavaScript("document.querySelector('[data-close=sourcesModal]').click(); document.querySelector('#btnSettings').click();");
+  await new Promise((r) => setTimeout(r, 600));
+  fs.writeFileSync(path.join(__dirname, '..', '.shots', 'settings.png'), (await win.capturePage()).toPNG());
+  console.log('saved settings.png');
+  await win.webContents.executeJavaScript("document.querySelector('[data-close=settingsModal]').click();");
+
   // 关闭弹窗 + 详情抽屉
   await win.webContents.executeJavaScript("document.querySelector('[data-close=importModal]').click(); document.querySelector('#tbody tr').click();");
   await new Promise((r) => setTimeout(r, 800));

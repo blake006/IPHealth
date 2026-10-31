@@ -393,6 +393,11 @@ Surge / Loon 配置、Quantumult X 配置、Base64 订阅内容"></textarea>
             <option value="tele2">Tele2 10MB</option>
           </select>
         </div>
+        <div class="field">
+          <label>订阅拉取代理（可选）</label>
+          <input id="setSubProxy" class="input" placeholder="127.0.0.1:7890，留空则跟随系统代理" />
+          <span class="tip">订阅域名被墙 / 拉取超时时，填本机代理端口即可；只影响订阅拉取，不影响节点检测</span>
+        </div>
         <label class="switch-line">
           <input type="checkbox" id="setDeepHealth" />
           <span>深度健康检测（DNSBL 黑名单查询，更准确但更慢）</span>

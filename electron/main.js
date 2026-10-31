@@ -209,7 +209,8 @@ ipcMain.handle('import:parse', (e, payload) => {
 });
 
 ipcMain.handle('import:fetch', async (e, url) => {
-  const text = await fetchSubscription(url);
+  const settings = store.read('settings.json', {});
+  const text = await fetchSubscription(url, { proxy: settings.subProxy || '' });
   const res = parser.parseText(text, { group: new URL(url).hostname, source: url });
   return { nodes: res.nodes, errors: res.errors, format: res.format, bytes: text.length };
 });

@@ -14,6 +14,7 @@ const state = {
     speedSource: 'cloudflare',
     deepHealth: true,
     autoSyncOnStart: false,
+    subProxy: '',
     latencyUrls: [],
     ipUrls: [],
     plainType: 'socks5',
@@ -92,6 +93,14 @@ function healthText(score) {
   if (score >= 70) return '良好';
   if (score >= 50) return '一般';
   return '较差';
+}
+
+/** 去掉 Electron IPC 包装，只留可读的错误文本 */
+function cleanError(e) {
+  let m = String((e && e.message) || e || '未知错误');
+  m = m.replace(/^Error invoking remote method '[^']*':\s*/, '');
+  m = m.replace(/^Error:\s*/, '');
+  return m;
 }
 
 function toast(msg, type) {
@@ -948,8 +957,9 @@ async function syncSources(list) {
       src.format = res.format || src.format;
       src.error = '';
     } catch (e) {
-      failures.push({ src, error: e.message || String(e) });
-      src.error = e.message || String(e);
+      const msg = cleanError(e);
+      failures.push({ src, error: msg });
+      src.error = msg;
     }
     renderSources();
     saveSources();
@@ -1096,11 +1106,12 @@ async function doImport() {
       closeModal('importModal');
     }
   } catch (e) {
-    toast('导入失败：' + (e.message || e), 'err');
+    const msg = cleanError(e);
+    toast('导入失败：' + msg, 'err');
     const box = state.importTab === 'sub' ? $('#subResult') : null;
     if (box) {
       box.className = 'sub-result err';
-      box.textContent = e.message || String(e);
+      box.textContent = msg;
     }
   }
 }
@@ -1317,6 +1328,7 @@ function fillSettings() {
   $('#setSpeedTimeout').value = s.speedTimeout;
   $('#setSpeedSource').value = s.speedSource;
   $('#setDeepHealth').checked = s.deepHealth !== false;
+  $('#setSubProxy').value = s.subProxy || '';
   $('#setLatencyUrls').value = (s.latencyUrls || []).join('\n');
   $('#setIpUrls').value = (s.ipUrls || []).join('\n');
 }
@@ -1330,6 +1342,7 @@ async function saveSettings() {
     speedTimeout: Math.max(5000, parseInt($('#setSpeedTimeout').value, 10) || 20000),
     speedSource: $('#setSpeedSource').value,
     deepHealth: $('#setDeepHealth').checked,
+    subProxy: $('#setSubProxy').value.trim(),
     latencyUrls: $('#setLatencyUrls').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
     ipUrls: $('#setIpUrls').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
   };
@@ -1584,7 +1597,7 @@ $('#btnAddSource').addEventListener('click', async () => {
     renderSources();
     toast(`订阅已添加：识别 ${res.nodes.length} 个节点，新增 ${added} 个`, 'ok');
   } catch (e) {
-    toast('订阅添加失败：' + (e.message || e), 'err');
+    toast('订阅添加失败：' + cleanError(e), 'err');
   }
 });
 
