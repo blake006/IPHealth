@@ -31,6 +31,7 @@ for (let i = 0; i < 14; i += 1) {
     conf: { uuid: 'b831381d', tls: true },
     raw: `${t}://example`,
     group: [c[0]][0],
+    source: i < 6 ? 'https://sub.example.com/api/v1/client/subscribe?token=8f3ac1' : i < 11 ? 'https://airport.example.net/api/v1/client/subscribe?token=xx91k2' : '',
     enabled: true,
     tcp: ok ? 40 + i * 7 : null,
     latency: ok ? 60 + i * 23 : null,
@@ -135,6 +136,12 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 800));
   fs.writeFileSync(path.join(__dirname, '..', '.shots', 'drawer.png'), (await win.capturePage()).toPNG());
   console.log('saved drawer.png');
+
+  // 导出弹窗
+  await win.webContents.executeJavaScript("document.querySelector('#drawerClose').click(); document.querySelector('#btnExport').click();");
+  await new Promise((r) => setTimeout(r, 600));
+  fs.writeFileSync(path.join(__dirname, '..', '.shots', 'export.png'), (await win.capturePage()).toPNG());
+  console.log('saved export.png');
 
   app.quit();
 });
