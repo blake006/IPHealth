@@ -8,7 +8,7 @@
 ![主界面](docs/screenshot.png)
 
 <details>
-<summary>导入面板 / 筛选面板 / 订阅源管理 / 节点详情 / 导出</summary>
+<summary>导入面板 / 筛选面板 / 订阅源管理 / 节点详情 / 导出面板</summary>
 
 ![导入面板](docs/screenshot-import.png)
 
@@ -18,7 +18,7 @@
 
 ![节点详情](docs/screenshot-detail.png)
 
-![导出](docs/screenshot-export.png)
+![导出面板](docs/screenshot-export.png)
 
 </details>
 
