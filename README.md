@@ -144,6 +144,7 @@
 
 ## 使用
 
+0. 直接到 [Releases](https://github.com/blake006/IPHealth/releases) 下载最新版（推荐）。
 1. 下载 `IPHealth-<版本>-win-x64-portable.exe` 双击运行（单文件免安装，内置内核，首次启动会解压到临时目录）；
    或下载 `IPHealth-<版本>-win-x64.zip` 解压后运行 `IPHealth.exe`。
 2. 点击 **导入代理** → 选择导入方式（批量链接 / 订阅地址 / 单条添加 / 文件导入）。
