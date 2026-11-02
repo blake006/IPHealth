@@ -120,10 +120,27 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+
+  // 兜底：首帧迟迟不来（页面卡住 / GPU 异常）也要把窗口显示出来，
+  // 否则进程活着但没窗口，用户只会看到「双击没反应」，而且它占着单实例锁。
+  const showTimer = setTimeout(() => {
+    if (win && !win.isDestroyed() && !win.isVisible()) {
+      try {
+        win.show();
+      } catch (e) {}
+    }
+  }, 8000);
+
   win.once('ready-to-show', () => {
+    clearTimeout(showTimer);
     if (state.maximized) win.maximize();
     win.show();
     if (isDev) win.webContents.openDevTools({ mode: 'detach' });
+  });
+
+  win.on('closed', () => {
+    clearTimeout(showTimer);
+    win = null;
   });
 
   win.on('close', saveWindowState);
@@ -141,7 +158,15 @@ function createWindow() {
 app.on('second-instance', () => {
   if (win && !win.isDestroyed()) {
     if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
+    win.setSkipTaskbar(false);
     win.focus();
+    try {
+      win.flashFrame(true);
+      setTimeout(() => {
+        if (win && !win.isDestroyed()) win.flashFrame(false);
+      }, 2500);
+    } catch (e) {}
     // 告诉界面「你点的那份没起来，已经在跑的是这一份」，避免误以为新版本没生效
     win.webContents.send('app:second-instance', {
       version: app.getVersion(),
@@ -173,8 +198,8 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on('window-all-closed', async () => {
-  if (core) await core.stop();
+app.on('window-all-closed', () => {
+  // 同步 quit，内核在 before-quit 里关；避免窗口没了进程还赖着不走（会占住单实例锁）
   if (process.platform !== 'darwin') app.quit();
 });
 

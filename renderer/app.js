@@ -1422,6 +1422,9 @@ async function init() {
     $('#coreVersion').textContent = '内核缺失';
   }
 
+  // 窗口标题带上版本号：任务栏悬停 / Alt+Tab 都能直接看到
+  document.title = `IPHealth v${info.appVersion} · 代理池健康检测`;
+
   const av = $('#appVersion');
   if (av) {
     av.textContent = 'v' + info.appVersion + (info.isPackaged ? '' : ' dev');
