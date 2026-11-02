@@ -169,6 +169,37 @@ function startServer() {
     assert.ok(text.includes('ss://'), text.slice(0, 40));
   });
 
+  await ta('detectLocalProxy 能发现本机在监听的端口', async () => {
+    const port = await sub.detectLocalProxy([srv.address().port]);
+    assert.strictEqual(port, srv.address().port);
+    const none = await sub.detectLocalProxy([1]);
+    assert.strictEqual(none, 0);
+  });
+
+  await ta('直连失败时提示本机代理端口情况', async () => {
+    let err = null;
+    try {
+      await sub.fetchSubscription('http://127.0.0.1:1/sub', { timeout: 8000, proxyCandidates: [1] });
+    } catch (e) {
+      err = e;
+    }
+    assert.ok(err, '应当抛错');
+    assert.ok(/本机未检测到常见代理端口/.test(err.message), err.message);
+  });
+
+  await ta('发现本机代理时建议填该端口', async () => {
+    let err = null;
+    try {
+      await sub.fetchSubscription('http://127.0.0.1:1/sub', {
+        timeout: 8000,
+        proxyCandidates: [srv.address().port],
+      });
+    } catch (e) {
+      err = e;
+    }
+    assert.ok(err && new RegExp(`127\\.0\\.0\\.1:${srv.address().port} 有代理在监听`).test(err.message), err && err.message);
+  });
+
   srv.close();
   console.log(`\n通过 ${pass} / ${pass + fail}`);
   process.exit(fail ? 1 : 0);

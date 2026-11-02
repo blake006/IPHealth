@@ -176,7 +176,8 @@
 > - 填了代理但**端口没在监听** → 「订阅拉取代理 127.0.0.1:7890 没有在监听」（并提示 Clash Verge 默认 7897）
 > - 服务端返回 **4xx** → 「订阅链接无效」，提示重新复制订阅链接（不是网络问题）
 > - 服务端返回 **5xx** → 「订阅服务端异常」
-> - 真的连不上 → DNS 诊断，形如「域名 xxx 被解析到 93.46.8.90（典型的 DNS 污染地址）」，并注明「已尝试代理 x 与直连」
+> - 真的连不上 → DNS 诊断，形如「域名 xxx 被解析到 93.46.8.90（典型的 DNS 污染地址）」，并注明「已尝试代理 x 与直连」；
+>   同时扫一遍本机常见代理端口（7890 / 7897 / 10809…）：有代理在跑就直接告诉你填哪个端口，没有就提醒先启动客户端
 > 处理方式：开启系统代理 / VPN，或在设置里填写本机代理端口（支持 `7890` / `127.0.0.1:7890` / `socks5://127.0.0.1:7890`）。
 
 ## 从源码构建
@@ -204,7 +205,7 @@ node scripts/test-runner.js   # 调度/失败处理端到端测试
 node scripts/test-merge.js    # 订阅同步合并/移除逻辑单测
 node scripts/test-filter.js   # 筛选逻辑单测（17 项）
 node scripts/test-clash.js    # Clash 配置导出（含 mihomo -t 校验）
-node scripts/test-subscribe.js  # 订阅拉取：重定向/404/5xx/超限/代理探测/错误文案（12 项）
+node scripts/test-subscribe.js  # 订阅拉取：重定向/404/5xx/超限/代理探测/错误文案（15 项）
 node scripts/verify-exe.js    # 打包产物自检：图标 / 产品名 / 版本号
 npx electron scripts/test-group-ui.js  # 分组/筛选交互端到端测试（17 项）
 npx electron scripts/test-sync.js  # 订阅更新端到端测试（本地起订阅服务）

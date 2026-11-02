@@ -128,6 +128,18 @@ function probeTcp(host, port, timeout = 900) {
   });
 }
 
+/** 常见的本地代理端口（Clash Verge 7897 / CFW·mihomo 7890 / v2rayN 10809 …） */
+const COMMON_PROXY_PORTS = [7890, 7897, 7891, 10808, 10809, 1080, 2080];
+
+/** 扫一遍本机常见代理端口，返回第一个在监听的端口号（没有则 0） */
+async function detectLocalProxy(ports = COMMON_PROXY_PORTS) {
+  for (const port of ports) {
+    // eslint-disable-next-line no-await-in-loop
+    if (await probeTcp('127.0.0.1', port, 350)) return port;
+  }
+  return 0;
+}
+
 /** 拆分 "127.0.0.1:7890" */
 function parseProxy(proxy) {
   const m = /^\[?([^\]]+?)\]?:([0-9]+)$/.exec(String(proxy || ''));
@@ -339,7 +351,19 @@ async function fetchSubscription(url, opts = {}) {
   const detail = await diagnose(url);
   const timedOut = seen.some((x) => /超时/.test(x.message));
   const head = timedOut ? '订阅拉取超时' : '订阅拉取失败';
-  throw new Error(`${head}。${detail}（${tried}）`);
+  throw new Error(`${head}。${detail}（${tried}${await proxyHint(proxy, opts.proxyCandidates)}）`);
 }
 
-module.exports = { fetchSubscription, fetchUrl, fetchWithNet, diagnose, normalizeProxy, decodeBuffer, probeTcp, parseProxy, SUB_UA, POISON_IPS };
+/**
+ * 直连失败且没配代理时，扫一下本机常见端口：
+ * 有代理在跑就告诉用户填哪个端口，没有就提醒先启动客户端——
+ * 比「可能被墙」这种只能干瞪眼的提示有用。
+ */
+async function proxyHint(proxy, candidates) {
+  if (proxy) return '';
+  const port = await detectLocalProxy(candidates);
+  if (port) return `；检测到本机 127.0.0.1:${port} 有代理在监听，可在「设置 → 订阅拉取代理」填该端口后重试`;
+  return '；本机未检测到常见代理端口（7890 / 7897 / 10809），如需经代理拉取请先启动代理客户端';
+}
+
+module.exports = { detectLocalProxy, proxyHint, COMMON_PROXY_PORTS, fetchSubscription, fetchUrl, fetchWithNet, diagnose, normalizeProxy, decodeBuffer, probeTcp, parseProxy, SUB_UA, POISON_IPS };
