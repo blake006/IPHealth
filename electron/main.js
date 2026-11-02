@@ -47,7 +47,7 @@ function resolveCorePath() {
 /* 订阅拉取                                                            */
 /* ------------------------------------------------------------------ */
 
-const { fetchSubscription, decodeBuffer } = require('./lib/subscribe');
+const { fetchSubscription, decodeBuffer, normalizeProxy } = require('./lib/subscribe');
 
 /* ------------------------------------------------------------------ */
 /* 窗口                                                                */
@@ -232,9 +232,10 @@ ipcMain.handle('import:parse', (e, payload) => {
 
 ipcMain.handle('import:fetch', async (e, url) => {
   const settings = store.read('settings.json', {});
-  const text = await fetchSubscription(url, { proxy: settings.subProxy || '' });
+  const proxy = normalizeProxy(settings.subProxy || '');
+  const text = await fetchSubscription(url, { proxy });
   const res = parser.parseText(text, { group: new URL(url).hostname, source: url });
-  return { nodes: res.nodes, errors: res.errors, format: res.format, bytes: text.length };
+  return { nodes: res.nodes, errors: res.errors, format: res.format, bytes: text.length, viaProxy: proxy };
 });
 
 ipcMain.handle('import:file', async () => {

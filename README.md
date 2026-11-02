@@ -171,8 +171,10 @@
 - **订阅拉取代理**：填 `127.0.0.1:7890` 这类本机代理端口；留空则跟随系统代理
 
 > 订阅拉取走的是 Chromium 网络栈（Electron `net`），会**自动使用系统代理**，并支持 HTTP/2。
-> 如果订阅域名被 DNS 污染或无法直连，会出现形如「域名 xxx 被解析到 93.46.8.90（典型的 DNS 污染地址）」的提示，
-> 此时开启系统代理 / VPN，或在设置里填写本机代理端口即可。
+> 填了「订阅拉取代理」时，**代理与直连并发竞速**，谁先拿到内容用谁——不会先干等代理超时再等直连。
+> 都失败才回退到 Node https（多 UA 重试），仍失败则做 DNS 诊断，提示形如
+> 「域名 xxx 被解析到 93.46.8.90（典型的 DNS 污染地址）」，并在末尾说明「已尝试代理 x 与直连」。
+> 处理方式：开启系统代理 / VPN，或在设置里填写本机代理端口（支持 `7890` / `127.0.0.1:7890` / `socks5://127.0.0.1:7890`）。
 
 ## 从源码构建
 
@@ -199,6 +201,7 @@ node scripts/test-runner.js   # 调度/失败处理端到端测试
 node scripts/test-merge.js    # 订阅同步合并/移除逻辑单测
 node scripts/test-filter.js   # 筛选逻辑单测（17 项）
 node scripts/test-clash.js    # Clash 配置导出（含 mihomo -t 校验）
+node scripts/test-subscribe.js  # 订阅拉取：重定向/404/超限/代理竞速/错误文案（9 项）
 node scripts/verify-exe.js    # 打包产物自检：图标 / 产品名 / 版本号
 npx electron scripts/test-group-ui.js  # 分组/筛选交互端到端测试（17 项）
 npx electron scripts/test-sync.js  # 订阅更新端到端测试（本地起订阅服务）

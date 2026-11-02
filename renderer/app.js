@@ -1098,7 +1098,8 @@ async function doImport() {
       const added = mergeNodes(res.nodes);
       registerSource(url, new URL(url).hostname, res.nodes.length, res.format);
       $('#subResult').className = 'sub-result ok';
-      $('#subResult').textContent = `订阅解析成功（${res.format || '未知格式'}）：识别 ${res.nodes.length} 个节点，新增 ${added} 个，已登记为订阅源`;
+      const via = res.viaProxy ? `，经代理 ${res.viaProxy}` : '';
+      $('#subResult').textContent = `订阅解析成功（${res.format || '未知格式'}）：识别 ${res.nodes.length} 个节点，新增 ${added} 个${via}，已登记为订阅源`;
       toast(`订阅导入成功，新增 ${added} 个节点`, 'ok');
       closeModal('importModal');
     } else if (tab === 'single') {
