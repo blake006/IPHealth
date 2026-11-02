@@ -1413,6 +1413,14 @@ async function init() {
     $('#coreVersion').textContent = '内核缺失';
   }
 
+  const av = $('#appVersion');
+  if (av) {
+    av.textContent = 'v' + info.appVersion + (info.isPackaged ? '' : ' dev');
+    av.classList.toggle('dev', !info.isPackaged);
+    av.title = `应用版本 ${info.appVersion}${info.isPackaged ? '' : '（开发模式）'}\n运行文件 ${info.execPath || ''}\n点击查看详情`;
+    av.addEventListener('click', () => $('#btnSettings').click());
+  }
+
   $('#aboutBox').innerHTML = `
     <div><b>版本</b> ${info.appVersion} · Electron ${info.electron} · ${info.platform}/${info.arch}</div>
     <div><b>内核</b> <code>${esc(info.coreVersion || '未检测到')}</code></div>

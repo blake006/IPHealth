@@ -56,7 +56,7 @@ let copiedText = null;
 let clashPayload = null;
 
 ipcMain.handle('app:info', () => ({
-  appVersion: '1.0.3', electron: process.versions.electron, node: process.versions.node,
+  appVersion: '1.0.5', electron: process.versions.electron, node: process.versions.node,
   platform: 'win32', arch: 'x64', coreVersion: 'test', corePath: 'x', coreFound: true,
   userData: 'x', execPath: 'C:\\tmp\\IPHealth.exe', isPackaged: true,
 }));
@@ -165,6 +165,21 @@ app.whenReady().then(async () => {
   })()`));
   check('右键菜单出现', r.items.length >= 6, r.items);
   check('右键菜单含复制链接 / 重命名 / 删除', r.items.includes('复制节点链接') && r.items.includes('重命名…') && r.items.includes('删除节点'), r.items);
+
+  /* ---------- 状态栏版本号 ---------- */
+  r = (await run(`(() => {
+    const el = document.querySelector('#appVersion');
+    return { text: el ? el.textContent.trim() : '', cls: el ? el.className : '' };
+  })()`));
+  check('状态栏显示版本号', r.text === 'v1.0.5', r);
+
+  await run(`document.querySelector('#appVersion').click()`);
+  await new Promise((res) => setTimeout(res, 350));
+  r = (await run(`(() => ({
+    open: document.querySelector('#settingsModal').classList.contains('open'),
+    about: (document.querySelector('#aboutBox').textContent || '').includes('1.0.5'),
+  }))()`));
+  check('点击版本号打开设置并显示版本', r.open && r.about, r);
 
   /* ---------- 无脚本错误 ---------- */
   check('无脚本错误', errs.length === 0, errs);

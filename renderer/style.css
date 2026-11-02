@@ -618,3 +618,11 @@ input[type='range']::-webkit-slider-thumb {
 }
 .ctx-menu button:hover { background: var(--bg-hover); color: var(--text); }
 .ctx-menu button.danger:hover { background: var(--bad-soft); color: var(--bad); }
+
+/* 状态栏版本号：点一下打开设置（含运行文件路径） */
+.app-ver {
+  cursor: pointer; font-variant-numeric: tabular-nums;
+  padding: 1px 6px; border-radius: 5px; border: 1px solid transparent;
+}
+.app-ver:hover { color: var(--text); background: var(--bg-hover); border-color: var(--border-soft); }
+.app-ver.dev { color: #f5a524; }

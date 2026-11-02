@@ -5,6 +5,7 @@
 const http = require('http');
 const https = require('https');
 const dns = require('dns');
+const net = require('net');
 
 const SUB_UA = [
   'clash-verge/v2.4.2',
@@ -46,7 +47,9 @@ function fetchUrl(url, uaIndex = 0, redirects = 0) {
         }
         if (res.statusCode !== 200) {
           res.resume();
-          return reject(new Error('HTTP ' + res.statusCode));
+          const err = new Error('HTTP ' + res.statusCode);
+          err.status = res.statusCode;
+          return reject(err);
         }
         let size = 0;
         const chunks = [];
@@ -107,6 +110,30 @@ function normalizeProxy(input) {
   return s;
 }
 
+/** TCP 端口探测：用来判断「填的代理端口到底有没有在监听」 */
+function probeTcp(host, port, timeout = 900) {
+  return new Promise((resolve) => {
+    const sock = net.connect({ host, port });
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      sock.destroy();
+      resolve(ok);
+    };
+    sock.setTimeout(timeout);
+    sock.once('connect', () => finish(true));
+    sock.once('timeout', () => finish(false));
+    sock.once('error', () => finish(false));
+  });
+}
+
+/** 拆分 "127.0.0.1:7890" */
+function parseProxy(proxy) {
+  const m = /^\[?([^\]]+?)\]?:([0-9]+)$/.exec(String(proxy || ''));
+  return m ? { host: m[1], port: Number(m[2]) } : null;
+}
+
 /**
  * 用 Electron 的 net 模块拉取（走 Chromium 网络栈）
  * 好处：自动使用系统代理、支持 HTTP/2、TLS 指纹与浏览器一致
@@ -162,7 +189,9 @@ async function fetchWithNet(url, timeout = 20000, proxy = '') {
 
     request.on('response', (res) => {
       if (res.statusCode >= 400) {
-        finish(reject, new Error('HTTP ' + res.statusCode));
+        const err = new Error('HTTP ' + res.statusCode);
+        err.status = res.statusCode;
+        finish(reject, err);
         try {
           res.resume();
         } catch (e) {}
@@ -220,26 +249,45 @@ async function diagnose(url) {
  *
  * 被墙的订阅站只有「走代理」能通，所以有代理时**代理与直连并发竞速**：
  * 谁先拿到内容就用谁，避免先干等 25s 代理超时再等直连超时（那种体验就是「卡住」）。
+ *   0) 填了代理 → 先探测端口，没在监听就直接说清楚（这是最常见的「填了代理也没用」）
  *   1) 代理（若配置）+ 直连 并发，先成功者胜
  *   2) 都失败 → Node https 多 UA 兜底（老订阅站 / 证书链异常）
- *   3) 全失败 → 拼一句能指导操作的话
+ *   3) 按失败原因给结论：4xx=链接失效、5xx=服务端异常、超时、连接失败（附 DNS 诊断）
  */
 async function fetchSubscription(url, opts = {}) {
   const proxy = normalizeProxy(opts.proxy);
   const timeout = Math.max(8000, Number(opts.timeout) || 25000);
-  const errors = [];
+  const seen = []; // { label, message, status }
+  const tried = proxy ? `已尝试代理 ${proxy} 与直连` : '未配置拉取代理，仅尝试直连';
+
+  if (proxy) {
+    const addr = parseProxy(proxy);
+    if (!addr) throw new Error(`订阅拉取代理格式不正确：${proxy}。应形如 127.0.0.1:7890`);
+    const alive = await probeTcp(addr.host, addr.port);
+    if (!alive) {
+      throw new Error(
+        `订阅拉取代理 ${proxy} 没有在监听：代理客户端没启动，或端口填错了` +
+          `（Clash Verge 默认 7897，Clash for Windows / mihomo 默认 7890）。` +
+          '请先启动代理再重试，或清空「设置 → 订阅拉取代理」改走系统代理。'
+      );
+    }
+  }
+
+  const record = (label, e) => {
+    seen.push({ label, message: (e && e.message) || '未知错误', status: (e && e.status) || 0 });
+  };
 
   const attempt = (label, proxyAddr, ms) =>
     new Promise((resolve) => {
       fetchWithNet(url, ms, proxyAddr)
         .then((text) => {
           if (text && text.trim()) return resolve(text);
-          errors.push(`${label}：内容为空`);
+          record(label, new Error('内容为空'));
           resolve(null);
         })
         .catch((e) => {
           // 非 Electron 环境（单测 / CLI）没有 net 模块，静默跳过
-          if (!e || e.message !== 'NET_UNAVAILABLE') errors.push(`${label}：${e && e.message}`);
+          if (!e || e.message !== 'NET_UNAVAILABLE') record(label, e);
           resolve(null);
         });
     });
@@ -267,18 +315,31 @@ async function fetchSubscription(url, opts = {}) {
       // eslint-disable-next-line no-await-in-loop
       const text = await fetchUrl(url, i);
       if (text && text.trim()) return text;
-      errors.push('直连（Node）：内容为空');
+      record('直连（Node）', new Error('内容为空'));
     } catch (e) {
-      errors.push(`直连（Node）：${e.message}`);
+      record('直连（Node）', e);
       if (/超时/.test(e.message)) break;
     }
   }
 
+  // 4xx：链接本身的问题，跟网络无关，别让用户去折腾代理
+  const clientErr = seen.find((x) => x.status >= 400 && x.status < 500);
+  if (clientErr) {
+    throw new Error(
+      `订阅链接无效：服务端返回 HTTP ${clientErr.status}。` +
+        '链接可能已过期、被重置，或更换设备后需要重新复制，请到服务商后台重新获取订阅链接。' +
+        `（${tried}）`
+    );
+  }
+  const serverErr = seen.find((x) => x.status >= 500);
+  if (serverErr) {
+    throw new Error(`订阅服务端异常：HTTP ${serverErr.status}，请稍后重试。（${tried}）`);
+  }
+
   const detail = await diagnose(url);
-  const timedOut = errors.some((m) => /超时/.test(m));
+  const timedOut = seen.some((x) => /超时/.test(x.message));
   const head = timedOut ? '订阅拉取超时' : '订阅拉取失败';
-  const tried = proxy ? `已尝试代理 ${proxy} 与直连` : '未配置拉取代理，仅尝试直连';
   throw new Error(`${head}。${detail}（${tried}）`);
 }
 
-module.exports = { fetchSubscription, fetchUrl, fetchWithNet, diagnose, normalizeProxy, decodeBuffer, SUB_UA, POISON_IPS };
+module.exports = { fetchSubscription, fetchUrl, fetchWithNet, diagnose, normalizeProxy, decodeBuffer, probeTcp, parseProxy, SUB_UA, POISON_IPS };

@@ -46,6 +46,9 @@ function startServer() {
       } else if (req.url === '/redirect') {
         res.writeHead(302, { Location: '/ok' });
         res.end();
+      } else if (req.url === '/500') {
+        res.writeHead(500);
+        res.end('boom');
       } else if (req.url === '/empty') {
         res.writeHead(200);
         res.end('');
@@ -108,7 +111,7 @@ function startServer() {
     assert.ok(text.includes('ss://'));
   });
 
-  await ta('全失败时给出诊断与「已尝试」说明', async () => {
+  await ta('404 判定为「链接无效」而不是「被墙」', async () => {
     let err = null;
     try {
       await sub.fetchSubscription(`http://127.0.0.1:${srv.address().port}/404`, { timeout: 8000 });
@@ -116,22 +119,54 @@ function startServer() {
       err = e;
     }
     assert.ok(err, '应当抛错');
-    assert.ok(/订阅拉取失败|订阅拉取超时/.test(err.message), err.message);
-    assert.ok(/已尝试代理|未配置拉取代理/.test(err.message), err.message);
+    assert.ok(/订阅链接无效/.test(err.message), err.message);
+    assert.ok(/HTTP 404/.test(err.message), err.message);
+    assert.ok(/未配置拉取代理，仅尝试直连/.test(err.message), err.message);
+    assert.ok(!/被墙|不可达/.test(err.message), '不应提示网络被墙：' + err.message);
   });
 
-  await ta('配置代理时错误信息里带上代理地址', async () => {
+  await ta('5xx 判定为「服务端异常」', async () => {
     let err = null;
     try {
-      // 指向一个必然失败的代理端口，直连也失败（404）
-      await sub.fetchSubscription(`http://127.0.0.1:${srv.address().port}/404`, {
+      await sub.fetchSubscription(`http://127.0.0.1:${srv.address().port}/500`, { timeout: 8000 });
+    } catch (e) {
+      err = e;
+    }
+    assert.ok(err && /服务端异常/.test(err.message) && /500/.test(err.message), err && err.message);
+  });
+
+  await ta('代理端口没在监听时直接说清楚', async () => {
+    let err = null;
+    try {
+      await sub.fetchSubscription(`http://127.0.0.1:${srv.address().port}/ok`, {
         timeout: 8000,
         proxy: '127.0.0.1:1',
       });
     } catch (e) {
       err = e;
     }
-    assert.ok(err && /127\.0\.0\.1:1/.test(err.message), err && err.message);
+    assert.ok(err, '应当抛错');
+    assert.ok(/没有在监听/.test(err.message), err.message);
+    assert.ok(/7897/.test(err.message), '应提示 Clash Verge 默认端口：' + err.message);
+  });
+
+  await ta('代理地址格式错误时提示正确写法', async () => {
+    let err = null;
+    try {
+      await sub.fetchSubscription(`http://127.0.0.1:${srv.address().port}/ok`, { proxy: 'abc' });
+    } catch (e) {
+      err = e;
+    }
+    assert.ok(err && /格式不正确/.test(err.message), err && err.message);
+  });
+
+  await ta('代理可用时走代理成功（用本地服务模拟代理端口）', async () => {
+    // 本地服务端口本身在监听 → 探测通过，随后竞速里直连也能拿到内容
+    const text = await sub.fetchSubscription(`http://127.0.0.1:${srv.address().port}/ok`, {
+      timeout: 8000,
+      proxy: `127.0.0.1:${srv.address().port}`,
+    });
+    assert.ok(text.includes('ss://'), text.slice(0, 40));
   });
 
   srv.close();
