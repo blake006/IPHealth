@@ -188,6 +188,18 @@
 
 > 这也是「先有一批节点、再用它们更新订阅」的闭环：节点都失效时这条兜底不生效，仍需本机代理或新的订阅链接。
 
+### 第一次使用：手上一个节点都没有
+
+订阅站被墙时，**没有任何出口的软件也变不出出口**，所以首次使用有三条实际可行的路：
+
+| 情况 | 做法 |
+| --- | --- |
+| 本机开着 Clash / v2rayN / sing-box 等客户端 | 直接导入即可：设置里「订阅拉取代理」留空时，会**自动探测并借用** 7890 / 7897 / 7891 / 10808 / 10809 / 1080 / 2080 中在监听的那个端口 |
+| 手机（流量 / 客户端）能打开订阅 | 把订阅内容整段复制到电脑，粘进「导入代理 → 批量链接」——Clash YAML、Base64、链接列表都能识别 |
+| 只有一条节点链接 | 用「单条添加」先加这一个，检测通过后再用它去拉订阅（见上一节） |
+
+空列表界面里也写了这三条提示，不用翻文档。
+
 ## 从源码构建
 
 ```bash
@@ -218,7 +230,8 @@ node scripts/test-node-proxy.js # 借道可用节点拉订阅：假 SOCKS5 + 真
 node scripts/verify-exe.js    # 打包产物自检：图标 / 产品名 / 版本号
 npx electron scripts/test-group-ui.js  # 分组/筛选交互端到端测试（17 项）
 npx electron scripts/test-sync.js  # 订阅更新端到端测试（本地起订阅服务）
-npx electron scripts/test-export-ui.js  # 来源筛选 / 导出 / 右键菜单（15 项）
+npx electron scripts/test-export-ui.js  # 来源筛选 / 导出 / 右键菜单（17 项）
+npx electron scripts/test-empty-ui.js   # 首次使用（空列表）引导（5 项）
 npm run verify-exe                 # 校验 exe 的产品名 / 版本号 / 图标资源
 ```
 

@@ -47,7 +47,7 @@ function resolveCorePath() {
 /* 订阅拉取                                                            */
 /* ------------------------------------------------------------------ */
 
-const { fetchSubscription, decodeBuffer, normalizeProxy } = require('./lib/subscribe');
+const { fetchSubscription, decodeBuffer, normalizeProxy, detectLocalProxy } = require('./lib/subscribe');
 
 /* ------------------------------------------------------------------ */
 /* 窗口                                                                */
@@ -276,9 +276,24 @@ async function fetchViaNodes(url) {
   throw new Error(errors[0] || '通过节点拉取失败');
 }
 
-ipcMain.handle('import:fetch', async (e, url) => {
+/**
+ * 拉订阅走哪个代理：
+ *   1) 设置里显式填的「订阅拉取代理」
+ *   2) 没填 → 自动探测本机常见代理端口（7890 / 7897 / 10809 …），探到就直接借用
+ *   3) 都没有 → 直连（失败后还有「借道可用节点」兜底）
+ * 第 2 条是给「第一次用、手上还没有节点，但本机开着代理客户端」的人省一步。
+ */
+async function resolveSubProxy() {
   const settings = store.read('settings.json', {});
-  const proxy = normalizeProxy(settings.subProxy || '');
+  const explicit = normalizeProxy(settings.subProxy || '');
+  if (explicit) return { proxy: explicit, auto: false };
+  const port = await detectLocalProxy();
+  if (port) return { proxy: `127.0.0.1:${port}`, auto: true };
+  return { proxy: '', auto: false };
+}
+
+ipcMain.handle('import:fetch', async (e, url) => {
+  const { proxy, auto: autoProxy } = await resolveSubProxy();
   let text = null;
   let viaNode = null;
   let directErr = null;
@@ -311,6 +326,7 @@ ipcMain.handle('import:fetch', async (e, url) => {
     format: res.format,
     bytes: text.length,
     viaProxy: proxy,
+    autoProxy,
     viaNode: viaNode ? { id: viaNode.id, name: viaNode.name || viaNode.server, latency: viaNode.latency } : null,
   };
 });
