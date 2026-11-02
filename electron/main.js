@@ -230,12 +230,89 @@ ipcMain.handle('import:parse', (e, payload) => {
   return res;
 });
 
+/**
+ * 借道「已检测可用的节点」拉订阅。
+ *
+ * 订阅站被墙、本机又没开代理时，直连和系统代理都没戏；
+ * 但工具里往往已经有一批检测通过的节点——用内核把它们起成本地 mixed 端口，
+ * 订阅就能从节点出去拉。内核保留 60s 供同一批同步复用，之后自动停掉。
+ */
+const NODE_PROXY_TTL = 60000;
+let nodeProxy = { at: 0, nodeId: '' };
+
+function usableNodes() {
+  const nodes = store.read('nodes.json', []);
+  return nodes
+    .filter((n) => n && n.status === 'ok' && n.type && n.server && n.port)
+    .sort((a, b) => (a.latency == null ? 1e9 : a.latency) - (b.latency == null ? 1e9 : b.latency));
+}
+
+async function ensureNodeProxy(nodes) {
+  const fresh =
+    nodeProxy.nodeId && Date.now() - nodeProxy.at < NODE_PROXY_TTL && core.running && nodes.some((n) => n.id === nodeProxy.nodeId);
+  if (fresh) return;
+  await core.start(nodes);
+  nodeProxy = { at: Date.now(), nodeId: nodes[0].id };
+}
+
+/** 依次尝试前几个可用节点，谁先拉到内容用谁 */
+async function fetchViaNodes(url) {
+  const nodes = usableNodes().slice(0, 3);
+  if (!nodes.length) return null;
+  await ensureNodeProxy(nodes);
+
+  const errors = [];
+  for (const n of nodes) {
+    const port = core.portOf(n.id);
+    if (!port) continue;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const text = await fetchSubscription(url, { proxy: `127.0.0.1:${port}`, timeout: 20000 });
+      if (text && text.trim()) return { text, node: n };
+    } catch (err) {
+      errors.push(`${n.name || n.server}：${err.message}`);
+    }
+  }
+  throw new Error(errors[0] || '通过节点拉取失败');
+}
+
 ipcMain.handle('import:fetch', async (e, url) => {
   const settings = store.read('settings.json', {});
   const proxy = normalizeProxy(settings.subProxy || '');
-  const text = await fetchSubscription(url, { proxy });
+  let text = null;
+  let viaNode = null;
+  let directErr = null;
+
+  try {
+    text = await fetchSubscription(url, { proxy });
+  } catch (err) {
+    directErr = err;
+  }
+
+  // 直连失败 → 自动借道已检测可用的节点再试一次
+  if (!text && !runner) {
+    try {
+      const r = await fetchViaNodes(url);
+      if (r) {
+        text = r.text;
+        viaNode = r.node;
+      }
+    } catch (err) {
+      /* 节点也失败时，报直连的原因更有参考价值 */
+    }
+  }
+
+  if (!text) throw directErr || new Error('订阅拉取失败');
+
   const res = parser.parseText(text, { group: new URL(url).hostname, source: url });
-  return { nodes: res.nodes, errors: res.errors, format: res.format, bytes: text.length, viaProxy: proxy };
+  return {
+    nodes: res.nodes,
+    errors: res.errors,
+    format: res.format,
+    bytes: text.length,
+    viaProxy: proxy,
+    viaNode: viaNode ? { id: viaNode.id, name: viaNode.name || viaNode.server, latency: viaNode.latency } : null,
+  };
 });
 
 ipcMain.handle('import:file', async () => {

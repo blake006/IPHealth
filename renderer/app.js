@@ -968,6 +968,7 @@ async function syncSources(list) {
   state.syncing = true;
   updateSyncButtons();
   let added = 0;
+  let viaNodeCount = 0;
   let updated = 0;
   let removed = 0;
   const failures = [];
@@ -980,6 +981,7 @@ async function syncSources(list) {
       // eslint-disable-next-line no-await-in-loop
       const res = await window.api.fetchSubscription(src.url);
       if (!res.nodes || !res.nodes.length) throw new Error('未解析到节点');
+      if (res.viaNode) viaNodeCount += 1;
       const r = mergeFromSource(src, res.nodes, removeGone);
       added += r.added;
       updated += r.updated;
@@ -1006,7 +1008,8 @@ async function syncSources(list) {
     if (!state.running && !state.syncing) $('#progressBar').style.width = '0';
   }, 900);
 
-  const summary = `更新完成：新增 ${added} · 更新 ${updated} · 移除 ${removed}`;
+  const viaNote = viaNodeCount ? `（其中 ${viaNodeCount} 个订阅经可用节点拉取）` : '';
+  const summary = `更新完成：新增 ${added} · 更新 ${updated} · 移除 ${removed}${viaNote}`;
   $('#statusText').textContent = summary;
   if (failures.length) {
     toast(`${summary}；${failures.length} 个订阅源失败：${failures[0].error}`, 'err');
@@ -1098,7 +1101,11 @@ async function doImport() {
       const added = mergeNodes(res.nodes);
       registerSource(url, new URL(url).hostname, res.nodes.length, res.format);
       $('#subResult').className = 'sub-result ok';
-      const via = res.viaProxy ? `，经代理 ${res.viaProxy}` : '';
+      const via = res.viaNode
+        ? `，经节点「${res.viaNode.name}」拉取`
+        : res.viaProxy
+          ? `，经代理 ${res.viaProxy}`
+          : '';
       $('#subResult').textContent = `订阅解析成功（${res.format || '未知格式'}）：识别 ${res.nodes.length} 个节点，新增 ${added} 个${via}，已登记为订阅源`;
       toast(`订阅导入成功，新增 ${added} 个节点`, 'ok');
       closeModal('importModal');
