@@ -31,6 +31,7 @@ const state = {
     maxLatency: null,
     minSpeed: null,
     dnsblOnly: false,
+    cleanOnly: false,
   },
   sidebarHidden: false,
   query: '',
@@ -241,12 +242,14 @@ function renderActiveFilters() {
   if (f.maxLatency != null) nums.push(`延迟 ≤ ${f.maxLatency}ms`);
   if (f.minSpeed != null) nums.push(`速度 ≥ ${f.minSpeed}Mbps`);
   if (f.dnsblOnly) nums.push('命中黑名单');
+  if (f.cleanOnly) nums.push('未命中黑名单');
   if (nums.length) {
     add(nums.join('，'), () => {
       state.filters.minHealth = null;
       state.filters.maxLatency = null;
       state.filters.minSpeed = null;
       state.filters.dnsblOnly = false;
+      state.filters.cleanOnly = false;
       syncFilterPanel();
       applyFilters();
     });
@@ -291,6 +294,7 @@ function resetFilters() {
     maxLatency: null,
     minSpeed: null,
     dnsblOnly: false,
+    cleanOnly: false,
   };
   state.query = '';
   const si = $('#searchInput');
@@ -526,6 +530,7 @@ function updateSelInfo() {
 /* ------------------------------------------------------------------ */
 
 const IP_TYPE_LABEL = { residential: '住宅', hosting: '机房', proxy: '代理', mobile: '移动', unknown: '未知' };
+const IP_CONF_LABEL = { high: '高', medium: '中', low: '低', none: '无' };
 
 function sbRow(opts) {
   const { label, count, active, value, facet, more } = opts;
@@ -858,6 +863,7 @@ function syncFilterPanel() {
   $('#fSpeedVal').textContent = f.minSpeed == null ? '不限' : `≥ ${f.minSpeed}`;
   $$('#fIpTypes .chip').forEach((c) => c.classList.toggle('active', f.ipTypes.includes(c.dataset.iptype)));
   $('#fDnsbl').checked = !!f.dnsblOnly;
+  $('#fClean').checked = !!f.cleanOnly;
 }
 
 function bindFilterPanel() {
@@ -887,6 +893,19 @@ function bindFilterPanel() {
   });
   $('#fDnsbl').addEventListener('change', (e) => {
     state.filters.dnsblOnly = e.target.checked;
+    // 两个互斥：同时勾只会筛出空集
+    if (e.target.checked && state.filters.cleanOnly) {
+      state.filters.cleanOnly = false;
+      $('#fClean').checked = false;
+    }
+    applyFilters();
+  });
+  $('#fClean').addEventListener('change', (e) => {
+    state.filters.cleanOnly = e.target.checked;
+    if (e.target.checked && state.filters.dnsblOnly) {
+      state.filters.dnsblOnly = false;
+      $('#fDnsbl').checked = false;
+    }
     applyFilters();
   });
   $('#btnResetFilter').addEventListener('click', resetFilters);
@@ -1314,6 +1333,9 @@ function openDrawer(id) {
       ${kv('城市', esc(n.city || '—'))}
       ${kv('ISP', esc(n.isp || '—'))}
       ${kv('ASN', esc(n.asn || '—'))}
+      ${kv('IP 类型', n.ipType ? `${esc(n.ipType)}${n.ipConfidence ? `<span class="dim" style="margin-left:6px;font-size:11px">可信度 ${esc(IP_CONF_LABEL[n.ipConfidence] || n.ipConfidence)}</span>` : ''}` : '—')}
+      ${n.ptr ? kv('反向解析', `<span class="mono dim" style="font-size:11.5px">${esc(n.ptr)}</span>`) : ''}
+      ${n.ipTypeNote ? kv('判定依据', `<span class="dim" style="font-size:11.5px">${esc(n.ipTypeNote)}</span>`) : ''}
     </div>
     <div class="section-title">节点配置</div>
     <div class="code-block">${esc(confJson)}</div>

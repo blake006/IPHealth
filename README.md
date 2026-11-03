@@ -35,7 +35,7 @@
 | 多协议支持 | VMess / VLESS / Trojan / Shadowsocks / SSR / Hysteria / Hysteria2 / TUIC / AnyTLS / SOCKS5 / HTTP / WireGuard |
 | 延迟检测 | 先预热再 3 次采样，输出平均延迟与抖动；同时给出 TCP 握手延迟 |
 | 测速 | 通过节点真实下载指定数据量，换算 Mbps（测速源可切换） |
-| IP 归属地 | 出口 IP、国家/地区/城市、ISP、ASN、IP 类型（住宅 / 机房 / 移动 / 代理） |
+| IP 归属地 | 出口 IP、国家/地区/城市、ISP、ASN、IP 类型（住宅 / 机房 / 移动 / 代理）+ 判定依据与可信度 |
 | IP 健康度 | 0–100 分综合评分，含 DNSBL 黑名单查询、代理特征识别 |
 | 结果管理 | 排序、筛选、搜索、多选删除、详情抽屉（含健康度扣分依据）、右键菜单 |
 | 导出 | CSV / JSON / TXT / **Clash 配置（YAML）**，一键复制节点链接到剪贴板 |
@@ -107,7 +107,7 @@
 
 - 健康度 ≥ N、延迟 ≤ N ms、速度 ≥ N Mbps
 - IP 类型（住宅 / 机房 / 代理 / 移动 / 未知）
-- 只看命中黑名单的节点
+- 只看命中黑名单的节点 / 只看**未**命中黑名单的节点（后者要求「查过且干净」，没查过的不算）
 
 已生效的条件会以 chips 显示在表格上方，可单条移除或「清除全部」；侧栏数量会随其它筛选条件实时联动（分面计数），顶部状态 chip 的数字也按当前筛选结果统计。
 
@@ -125,6 +125,26 @@
 
 > 典型用法：筛出「可用 + 健康度 ≥ 80」的节点 → 导出 Clash 配置 → 导入客户端。
 > 导出的配置不依赖 geoip 数据库，首次导入不会触发地理库下载。
+
+## IP 类型是怎么判的
+
+单看一个数据源的 `proxy/hosting` 标记很容易误判（尤其住宅 IP 常被漏判），所以改成**多源并行 + 加权投票**：
+
+| 信号源 | 提供什么 | 权重 |
+| --- | --- | --- |
+| ip-api 批量接口 | `proxy` / `hosting` / `mobile` 标记、ISP、ASN、城市 | 各 2 |
+| ipinfo.io | 运营商全名（`AS15169 Google LLC`），补 ip-api 缺失的字段 | 1 |
+| 内置 ASN 表 | 40+ 个云厂商 / IDC 的 ASN（AWS、GCP、Azure、DO、Vultr、Hetzner、OVH、阿里云、腾讯云…） | 2 |
+| 运营商名启发式 | `broadband / telecom / unicom / 电信 / 联通 / 移动 / cable / fiber` 等 | 1 |
+| PTR 反向解析 | `dynamic / ppp / dsl / pool / client` → 家宽；`vps / cloud / server / colo / idc` → 机房 | 1 |
+
+判定顺序：**机房+代理 → 代理/VPN；机房票数 ≥2 → 机房；代理 ≥2 → 代理；移动 ≥2 → 移动；有家宽信号且无机房信号 → 住宅；否则「普通 IP」**。
+
+> 关键改动：以前「查到 IP 就当住宅」，现在**没有正面证据不会标住宅**，所以列表里的「住宅」可信得多。
+> 每条结果还带**可信度**（高/中/低/无）和**判定依据**（如 `ip-api:机房 · AS14061 云厂商 · ISP 名称像机房`），在节点详情里能看到。
+
+为了不拖慢检测，只有 ip-api 没给出明确标记（或压根没返回）的 IP 才会去补 ipinfo + PTR，
+并发数跟随「并发数」设置；典型机房节点几乎不产生额外请求。
 
 ## 健康度评分
 
@@ -223,7 +243,8 @@ node scripts/test-parser.js   # 21 种导入格式解析测试
 node scripts/test-config.js   # 生成的 mihomo 配置合法性校验
 node scripts/test-runner.js   # 调度/失败处理端到端测试
 node scripts/test-merge.js    # 订阅同步合并/移除逻辑单测
-node scripts/test-filter.js   # 筛选逻辑单测（17 项）
+node scripts/test-filter.js   # 筛选逻辑单测（19 项）
+node scripts/test-geo.js      # IP 类型判定 / 评分（12 项）
 node scripts/test-clash.js    # Clash 配置导出（含 mihomo -t 校验）
 node scripts/test-subscribe.js  # 订阅拉取：重定向/404/5xx/超限/代理探测/错误文案（15 项）
 node scripts/test-node-proxy.js # 借道可用节点拉订阅：假 SOCKS5 + 真内核（2 项）

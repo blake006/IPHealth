@@ -215,4 +215,43 @@ t('搜索命中订阅源主机名', () => {
   assert.strictEqual(list.filter((x) => F.matches(x, base(), 'ghost')).length, 1);
 });
 
+t('只看未命中黑名单', () => {
+  const list = [
+    n({ id: 'clean', dnsbl: [] }),
+    n({ id: 'listed', dnsbl: ['Spamhaus'] }),
+    n({ id: 'unchecked', dnsbl: null }),
+  ];
+  const f = base();
+  f.cleanOnly = true;
+  const ids = list.filter((x) => F.matches(x, f, '')).map((x) => x.id);
+  assert.deepStrictEqual(ids, ['clean']);
+  assert.strictEqual(F.isActive(f, ''), true);
+  assert.strictEqual(F.activeCount(f, ''), 1);
+
+  // 与「只看命中黑名单」互斥使用，同时开只会是空集
+  f.dnsblOnly = true;
+  assert.strictEqual(list.filter((x) => F.matches(x, f, '')).length, 0);
+});
+
+t('IP 类型优先用检测结论 ipClass', () => {
+  assert.strictEqual(F.ipTypeKey({ ipClass: 'residential', ip: '1.1.1.1' }), 'residential');
+  assert.strictEqual(F.ipTypeKey({ ipClass: 'hosting', ip: '1.1.1.1' }), 'hosting');
+  assert.strictEqual(F.ipTypeKey({ ipClass: 'plain', ip: '1.1.1.1' }), 'unknown');
+  // 旧数据没有 ipClass，退回 flags 判断
+  assert.strictEqual(F.ipTypeKey({ hostingFlag: true, ip: '1.1.1.1' }), 'hosting');
+  assert.strictEqual(F.ipTypeKey({ ip: '1.1.1.1' }), 'residential');
+  assert.strictEqual(F.ipTypeKey({}), 'unknown');
+
+  const list = [
+    n({ id: 'r', ipClass: 'residential' }),
+    n({ id: 'h', ipClass: 'hosting' }),
+    n({ id: 'p', ipClass: 'plain' }),
+  ];
+  const f = base();
+  f.ipTypes = ['residential'];
+  assert.deepStrictEqual(list.filter((x) => F.matches(x, f, '')).map((x) => x.id), ['r']);
+  f.ipTypes = ['unknown'];
+  assert.deepStrictEqual(list.filter((x) => F.matches(x, f, '')).map((x) => x.id), ['p']);
+});
+
 console.log(`\n通过 ${pass} 项`);

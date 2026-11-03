@@ -19,6 +19,7 @@
     maxLatency: null,
     minSpeed: null,
     dnsblOnly: false,
+    cleanOnly: false, // 只看「未命中黑名单」的节点
   };
 
   function normalize(f) {
@@ -33,6 +34,9 @@
 
   /** IP 类型归类（住宅 / 机房 / 代理 / 移动 / 未知） */
   function ipTypeKey(n) {
+    // 新数据：检测阶段已经给出结论（多源投票）
+    if (n.ipClass) return n.ipClass === 'plain' ? 'unknown' : n.ipClass;
+    // 旧数据：只有 flags
     if (n.mobileFlag) return 'mobile';
     if (n.hostingFlag) return 'hosting';
     if (n.proxyFlag) return 'proxy';
@@ -104,6 +108,8 @@
       if (c.maxLatency != null && (n.latency == null || n.latency > c.maxLatency)) return false;
       if (c.minSpeed != null && (n.speed == null || n.speed < c.minSpeed)) return false;
       if (c.dnsblOnly && !(n.dnsbl && n.dnsbl.length)) return false;
+      // 只看未命中黑名单：必须「查过」且结果为空数组（没查过的不能算干净）
+      if (c.cleanOnly && !(Array.isArray(n.dnsbl) && n.dnsbl.length === 0)) return false;
     }
 
     if (skip !== 'query' && !textMatch(n, query)) return false;
@@ -135,6 +141,7 @@
       c.maxLatency != null ||
       c.minSpeed != null ||
       c.dnsblOnly ||
+      c.cleanOnly ||
       !!query
     );
   }
@@ -148,7 +155,7 @@
     if (c.countries.length) n += 1;
     if (c.sources.length) n += 1;
     if (c.ipTypes.length) n += 1;
-    if (c.minHealth != null || c.maxLatency != null || c.minSpeed != null || c.dnsblOnly) n += 1;
+    if (c.minHealth != null || c.maxLatency != null || c.minSpeed != null || c.dnsblOnly || c.cleanOnly) n += 1;
     if (query) n += 1;
     return n;
   }

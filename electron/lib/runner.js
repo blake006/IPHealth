@@ -233,7 +233,7 @@ class Runner {
       if (wantIp) {
         this.emit({ type: 'phase', phase: 'geo', count: chunk.length });
         const okNodes = chunk.filter((n) => n.ip);
-        const ipMap = await geo.lookupBatch(okNodes.map((n) => n.ip));
+        const ipMap = await geo.lookupBatch(okNodes.map((n) => n.ip), { concurrency });
 
         const dnsblMap = new Map();
         if (deep) {
@@ -265,6 +265,10 @@ class Runner {
             isp: g ? g.isp : '',
             asn: g ? g.asn : '',
             ipType: g ? geo.ipTypeLabel(g) : n.ip ? '未知' : '',
+            ipClass: g ? g.ipClass : n.ip ? 'unknown' : '',
+            ipTypeNote: g ? (g.ipNotes || []).join(' · ') : '',
+            ipConfidence: g ? g.ipConfidence || '' : '',
+            ptr: g ? g.ptr || '' : '',
             proxyFlag: g ? g.proxy : null,
             hostingFlag: g ? g.hosting : null,
             mobileFlag: g ? g.mobile : null,
