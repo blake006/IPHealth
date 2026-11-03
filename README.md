@@ -237,8 +237,19 @@ npm run dist           # 打包 → dist/IPHealth-<版本>-win-x64.zip
 npm run dist:exe       # 用 NSIS 生成单文件便携 exe（需安装 NSIS）
 ```
 
-版本号规则：`1.0.X` 顺序递增（`1.0.0 → 1.0.1 → 1.0.2 …`）。
-只需改 `package.json` 的 `version`，zip 与 exe 的产物名、exe 的版本资源都会自动跟随。
+版本号规则：次版本 0~10 顺次递增，满 10 进位（补丁位归零）：
+
+```
+1.1.0 → 1.1.1 → … → 1.1.10 → 1.2.0 → … → 1.2.10 → 1.3.0 → …
+```
+
+```bash
+npm run bump           # 按规则自动 +1（会直接改 package.json）
+npm run bump 1.3.0     # 指定版本
+npm run bump -- --dry-run   # 只看下一个版本号
+```
+
+zip 与 exe 的产物名、exe 的版本资源都会自动跟随 `package.json` 的 `version`。
 
 > 打包说明：默认关闭代码签名与 exe 资源改写（`signAndEditExecutable: false`），
 > 以避免在无证书环境下拉取 winCodeSign；exe 图标与版本信息由 NSIS 脚本写入。
@@ -252,6 +263,7 @@ node scripts/test-runner.js   # 调度/失败处理端到端测试
 node scripts/test-merge.js    # 订阅同步合并/移除逻辑单测
 node scripts/test-filter.js   # 筛选逻辑单测（19 项）
 node scripts/test-geo.js      # IP 类型判定 / 评分（12 项）
+node scripts/test-version.js  # 版本号推进规则（8 项）
 node scripts/test-clash.js    # Clash 配置导出（含 mihomo -t 校验）
 node scripts/test-subscribe.js  # 订阅拉取：重定向/404/5xx/超限/代理探测/错误文案（15 项）
 node scripts/test-node-proxy.js # 借道可用节点拉订阅：假 SOCKS5 + 真内核（2 项）
