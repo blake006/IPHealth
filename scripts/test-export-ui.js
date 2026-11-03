@@ -40,10 +40,10 @@ const SRC_A = 'https://alpha.example.com/sub?token=1';
 const SRC_B = 'https://beta.example.com/sub';
 
 const nodes = [
-  mk('a', { source: SRC_A, status: 'ok' }),
-  mk('b', { source: SRC_A, status: 'ok', latency: 300 }),
-  mk('c', { source: SRC_B, status: 'fail', latency: null }),
-  mk('d', { source: '', status: 'ok' }),
+  mk('a', { source: SRC_A, status: 'ok', ipClass: 'residential', ipType: '住宅宽带' }),
+  mk('b', { source: SRC_A, status: 'ok', latency: 300, ipClass: 'plain', ipType: '普通 IP' }),
+  mk('c', { source: SRC_B, status: 'fail', latency: null, ipClass: 'hosting', ipType: '机房 IDC' }),
+  mk('d', { source: '', status: 'ok', ipClass: 'proxy', ipType: '代理/VPN' }),
 ];
 
 const results = [];
@@ -165,6 +165,16 @@ app.whenReady().then(async () => {
   })()`));
   check('右键菜单出现', r.items.length >= 6, r.items);
   check('右键菜单含复制链接 / 重命名 / 删除', r.items.includes('复制节点链接') && r.items.includes('重命名…') && r.items.includes('删除节点'), r.items);
+
+  /* ---------- IP 类型列 ---------- */
+  r = (await run(`(() => {
+    const th = [...document.querySelectorAll('.grid thead th')].some((t) => t.textContent.trim() === '类型');
+    const tags = [...document.querySelectorAll('#tbody .type-tag')].map((t) => t.textContent.trim());
+    return { th, tags };
+  })()`));
+  check('表格有「类型」列', r.th, r);
+  check('住宅与普通分开显示', r.tags.includes('住宅') && r.tags.includes('普通'), r.tags);
+  check('机房/代理也能显示', r.tags.includes('机房') && r.tags.includes('代理'), r.tags);
 
   /* ---------- 状态栏版本号 ---------- */
   r = (await run(`(() => {

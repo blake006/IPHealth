@@ -14,7 +14,7 @@
     protocols: [], // 协议 type 列表
     countries: [], // 国家码列表（空字符串代表未知）
     sources: [], // 订阅源标识（订阅 URL 或文件名，空字符串代表手动添加）
-    ipTypes: [], // residential | hosting | proxy | mobile | unknown
+    ipTypes: [], // residential | plain | hosting | proxy | mobile | unknown
     minHealth: null,
     maxLatency: null,
     minSpeed: null,
@@ -32,11 +32,21 @@
     return out;
   }
 
-  /** IP 类型归类（住宅 / 机房 / 代理 / 移动 / 未知） */
+  /**
+   * IP 类型归类（住宅 / 普通 / 机房 / 代理 / 移动 / 未知）
+   * 「普通」和「住宅」是两类：住宅要有家宽证据，普通是「有 IP 但没有类型证据」。
+   */
   function ipTypeKey(n) {
     // 新数据：检测阶段已经给出结论（多源投票）
-    if (n.ipClass) return n.ipClass === 'plain' ? 'unknown' : n.ipClass;
-    // 旧数据：只有 flags
+    if (n.ipClass) return n.ipClass;
+    // 旧数据：先用已存的类型文案
+    const t = n.ipType || '';
+    if (t.includes('住宅')) return 'residential';
+    if (t.includes('机房')) return 'hosting';
+    if (t.includes('代理')) return 'proxy';
+    if (t.includes('移动')) return 'mobile';
+    if (t.includes('普通')) return 'plain';
+    // 再退回 flags
     if (n.mobileFlag) return 'mobile';
     if (n.hostingFlag) return 'hosting';
     if (n.proxyFlag) return 'proxy';

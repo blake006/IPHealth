@@ -233,25 +233,30 @@ t('只看未命中黑名单', () => {
   assert.strictEqual(list.filter((x) => F.matches(x, f, '')).length, 0);
 });
 
-t('IP 类型优先用检测结论 ipClass', () => {
+t('IP 类型优先用检测结论 ipClass（住宅与普通分开）', () => {
   assert.strictEqual(F.ipTypeKey({ ipClass: 'residential', ip: '1.1.1.1' }), 'residential');
+  assert.strictEqual(F.ipTypeKey({ ipClass: 'plain', ip: '1.1.1.1' }), 'plain');
   assert.strictEqual(F.ipTypeKey({ ipClass: 'hosting', ip: '1.1.1.1' }), 'hosting');
-  assert.strictEqual(F.ipTypeKey({ ipClass: 'plain', ip: '1.1.1.1' }), 'unknown');
-  // 旧数据没有 ipClass，退回 flags 判断
+  // 旧数据：先看已存的类型文案
+  assert.strictEqual(F.ipTypeKey({ ipType: '住宅宽带', ip: '1.1.1.1' }), 'residential');
+  assert.strictEqual(F.ipTypeKey({ ipType: '普通 IP', ip: '1.1.1.1' }), 'plain');
+  // 再退回 flags
   assert.strictEqual(F.ipTypeKey({ hostingFlag: true, ip: '1.1.1.1' }), 'hosting');
   assert.strictEqual(F.ipTypeKey({ ip: '1.1.1.1' }), 'residential');
   assert.strictEqual(F.ipTypeKey({}), 'unknown');
 
   const list = [
     n({ id: 'r', ipClass: 'residential' }),
-    n({ id: 'h', ipClass: 'hosting' }),
     n({ id: 'p', ipClass: 'plain' }),
+    n({ id: 'h', ipClass: 'hosting' }),
   ];
   const f = base();
   f.ipTypes = ['residential'];
   assert.deepStrictEqual(list.filter((x) => F.matches(x, f, '')).map((x) => x.id), ['r']);
-  f.ipTypes = ['unknown'];
+  f.ipTypes = ['plain'];
   assert.deepStrictEqual(list.filter((x) => F.matches(x, f, '')).map((x) => x.id), ['p']);
+  f.ipTypes = ['residential', 'plain'];
+  assert.deepStrictEqual(list.filter((x) => F.matches(x, f, '')).map((x) => x.id), ['r', 'p']);
 });
 
 console.log(`\n通过 ${pass} 项`);

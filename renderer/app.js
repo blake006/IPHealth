@@ -230,7 +230,7 @@ function renderActiveFilters() {
     });
   }
   if (f.ipTypes.length) {
-    const map = { residential: '住宅', hosting: '机房', proxy: '代理', mobile: '移动', unknown: '未知' };
+    const map = IP_TYPE_LABEL;
     add(`IP 类型：${f.ipTypes.map((t) => map[t] || t).join(' / ')}`, () => {
       state.filters.ipTypes = [];
       syncFilterPanel();
@@ -367,6 +367,7 @@ function rowHtml(n) {
     <td class="col-num" data-cell="speed">${fmtSpeed(n.speed)}</td>
     <td class="col-ip mono" data-cell="ip">${n.ip ? esc(n.ip) : '<span class="dim">—</span>'}</td>
     <td class="col-loc" data-cell="loc">${locHtml(n)}</td>
+    <td class="col-type" data-cell="type">${typeHtml(n)}</td>
     <td class="col-isp dim" data-cell="isp" title="${esc(n.isp || '')}">${esc(n.isp || '—')}</td>
     <td class="col-health" data-cell="health">${healthHtml(n)}</td>
     <td class="col-act">
@@ -382,6 +383,15 @@ function rowHtml(n) {
         </button>
       </div>
     </td>`;
+}
+
+/** IP 类型小标签：住宅 / 普通 / 机房 / 代理 / 移动 */
+function typeHtml(n) {
+  if (!n.ip) return '<span class="dim">—</span>';
+  const key = window.IPHFilter.ipTypeKey(n);
+  if (key === 'unknown') return '<span class="dim">未知</span>';
+  const label = IP_TYPE_LABEL[key] || key;
+  return `<span class="type-tag t-${key}" title="${esc(n.ipTypeNote || label)}">${label}</span>`;
 }
 
 function locHtml(n) {
@@ -447,6 +457,7 @@ function updateRow(n) {
   set('ip', n.ip ? esc(n.ip) : '<span class="dim">—</span>');
   set('group', groupHtml(n));
   set('loc', locHtml(n));
+  set('type', typeHtml(n));
   set('isp', esc(n.isp || '—'));
   set('health', healthHtml(n));
 
@@ -529,7 +540,7 @@ function updateSelInfo() {
 /* 分组 & 分面侧栏                                                     */
 /* ------------------------------------------------------------------ */
 
-const IP_TYPE_LABEL = { residential: '住宅', hosting: '机房', proxy: '代理', mobile: '移动', unknown: '未知' };
+const IP_TYPE_LABEL = { residential: '住宅', plain: '普通', hosting: '机房', proxy: '代理', mobile: '移动', unknown: '未知' };
 const IP_CONF_LABEL = { high: '高', medium: '中', low: '低', none: '无' };
 
 function sbRow(opts) {
